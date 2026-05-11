@@ -1,13 +1,27 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import Timer from './Timer'
+
+const VOTE_SECONDS = 25
 
 function Voting({ prompt, answers, isAuthor, step, totalSteps, onVote, onNext }) {
   const [voted, setVoted] = useState(null)
+  const [autoAdvance, setAutoAdvance] = useState(false)
 
   const handleVote = (index) => {
     if (voted !== null) return
     setVoted(index)
     onVote?.(index)
   }
+
+  const handleExpire = () => {
+    setAutoAdvance(true)
+  }
+
+  useEffect(() => {
+    if (!autoAdvance) return
+    const id = setTimeout(() => onNext?.(), 1200)
+    return () => clearTimeout(id)
+  }, [autoAdvance, onNext])
 
   if (isAuthor) {
     return (
@@ -19,6 +33,8 @@ function Voting({ prompt, answers, isAuthor, step, totalSteps, onVote, onNext })
           <h2 className="text-2xl sm:text-3xl font-bold text-center mb-10 leading-tight">
             {prompt}
           </h2>
+
+          <Timer seconds={VOTE_SECONDS} onExpire={handleExpire} />
 
           <div className="space-y-4">
             {answers.map((text, i) => (
@@ -35,12 +51,16 @@ function Voting({ prompt, answers, isAuthor, step, totalSteps, onVote, onNext })
             <p className="text-slate-400">
               You're in this matchup — sit back while the others vote.
             </p>
-            <button
-              onClick={onNext}
-              className="rounded-lg bg-purple-600 hover:bg-purple-500 px-6 py-3 font-semibold transition"
-            >
-              Reveal results →
-            </button>
+            {autoAdvance ? (
+              <p className="text-slate-500 text-sm">Time's up — revealing…</p>
+            ) : (
+              <button
+                onClick={onNext}
+                className="rounded-lg bg-purple-600 hover:bg-purple-500 px-6 py-3 font-semibold transition"
+              >
+                Reveal results →
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -56,6 +76,8 @@ function Voting({ prompt, answers, isAuthor, step, totalSteps, onVote, onNext })
         <h2 className="text-2xl sm:text-3xl font-bold text-center mb-10 leading-tight">
           {prompt}
         </h2>
+
+        <Timer seconds={VOTE_SECONDS} onExpire={handleExpire} />
 
         <div className="space-y-4">
           {answers.map((text, i) => {
@@ -83,13 +105,23 @@ function Voting({ prompt, answers, isAuthor, step, totalSteps, onVote, onNext })
         {voted !== null && (
           <div className="text-center mt-8 space-y-3">
             <p className="text-slate-400">Locked in. Waiting for others…</p>
-            <button
-              onClick={onNext}
-              className="rounded-lg bg-purple-600 hover:bg-purple-500 px-6 py-3 font-semibold transition"
-            >
-              Reveal results →
-            </button>
+            {autoAdvance ? (
+              <p className="text-slate-500 text-sm">Time's up — revealing…</p>
+            ) : (
+              <button
+                onClick={onNext}
+                className="rounded-lg bg-purple-600 hover:bg-purple-500 px-6 py-3 font-semibold transition"
+              >
+                Reveal results →
+              </button>
+            )}
           </div>
+        )}
+
+        {voted === null && autoAdvance && (
+          <p className="text-center text-slate-500 text-sm mt-8">
+            Time's up — no vote cast.
+          </p>
         )}
       </div>
     </div>
