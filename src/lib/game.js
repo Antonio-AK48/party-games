@@ -20,10 +20,35 @@ const arr = (x) => (!x ? [] : Array.isArray(x) ? x : Object.values(x))
 export function buildMatchups(players, round) {
   const n = players.length
   const offset = (round - 1) * n
-  return players.map((p, i) => ({
-    prompt: prompts[(offset + i) % prompts.length],
-    authors: [p.uid, players[(i + 1) % n].uid],
-  }))
+  return players.map((p, i) => {
+    const authors = [p.uid, players[(i + 1) % n].uid]
+    const template = prompts[(offset + i) % prompts.length]
+    return { prompt: fillPrompt(template, authors, players), authors }
+  })
+}
+
+// Replace {player}/{player2} tokens with real names. Prefers players who aren't
+// authoring this matchup (so nobody is forced to write about themselves), and
+// falls back to the authors if there aren't enough others. Resolved once on the
+// host and stored in RTDB, so all clients see the same filled-in prompt. A
+// function replacement avoids `$`-in-name surprises with String.replace.
+function fillPrompt(template, authorUids, players) {
+  if (!template.includes('{player')) return template
+  const shuffle = (a) =>
+    a
+      .map((v) => [Math.random(), v])
+      .sort((x, y) => x[0] - y[0])
+      .map((x) => x[1])
+  const isAuthor = (p) => authorUids.includes(p.uid)
+  const pool = [
+    ...shuffle(players.filter((p) => !isAuthor(p)).map((p) => p.name)),
+    ...shuffle(players.filter(isAuthor).map((p) => p.name)),
+  ]
+  const p1 = pool[0] || 'someone'
+  const p2 = pool[1] || pool[0] || 'someone'
+  return template
+    .replace(/\{player2\}/g, () => p2)
+    .replace(/\{player\}/g, () => p1)
 }
 
 // Every author of every matchup has submitted an answer.

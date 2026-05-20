@@ -90,7 +90,7 @@ async function playersOrdered(code) {
   const snap = await get(ref(db, `rooms/${code}/players`))
   const val = snap.val() || {}
   return Object.entries(val)
-    .map(([uid, p]) => ({ uid, joinedAt: p.joinedAt || 0 }))
+    .map(([uid, p]) => ({ uid, name: p.name, joinedAt: p.joinedAt || 0 }))
     .sort((a, b) => a.joinedAt - b.joinedAt)
 }
 
