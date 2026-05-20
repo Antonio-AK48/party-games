@@ -19,9 +19,13 @@ export const isConfigured = Boolean(
   firebaseConfig.apiKey && firebaseConfig.databaseURL
 )
 
-const app = initializeApp(firebaseConfig)
-export const db = getDatabase(app)
-export const auth = getAuth(app)
+// Guard against a misconfigured deploy (missing env vars). Without this,
+// getDatabase() throws at import time and the whole app renders a blank white
+// page before <SetupNotice> can explain what's wrong. When unconfigured these
+// stay null and App renders the setup notice instead.
+const app = isConfigured ? initializeApp(firebaseConfig) : null
+export const db = app ? getDatabase(app) : null
+export const auth = app ? getAuth(app) : null
 
 // Sign in anonymously exactly once and cache the promise. Every room operation
 // awaits this so we always have a stable uid to key players/answers/votes by.
