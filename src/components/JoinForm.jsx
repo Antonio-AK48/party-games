@@ -1,8 +1,8 @@
 import { useState } from 'react'
 
-function JoinForm({ onSubmit, onBack, busy, error }) {
+function JoinForm({ onSubmit, onBack, busy, error, initialCode = '' }) {
   const [name, setName] = useState('')
-  const [code, setCode] = useState('')
+  const [code, setCode] = useState(initialCode)
 
   const canSubmit = name.trim() && code.length === 4 && !busy
 

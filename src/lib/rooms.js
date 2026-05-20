@@ -61,18 +61,35 @@ export async function createRoom(name) {
 
 export async function joinRoom(name, code) {
   const uid = await ensureAuth()
-  const metaSnap = await get(ref(db, `rooms/${code}/meta`))
+  const [metaSnap, playerSnap] = await Promise.all([
+    get(ref(db, `rooms/${code}/meta`)),
+    get(ref(db, `rooms/${code}/players/${uid}`)),
+  ])
   if (!metaSnap.exists()) throw new Error("That room doesn't exist")
-  if (metaSnap.val().status !== 'lobby') {
+  const alreadyIn = playerSnap.exists()
+  // New players can only join during the lobby; existing players may rejoin
+  // anytime (e.g. after a refresh mid-game).
+  if (!alreadyIn && metaSnap.val().status !== 'lobby') {
     throw new Error('That game has already started')
   }
-  await update(ref(db, `rooms/${code}/players/${uid}`), {
-    name,
-    score: 0,
-    isHost: false,
-    joinedAt: serverTimestamp(),
-  })
+  if (alreadyIn) {
+    await update(ref(db, `rooms/${code}/players/${uid}`), { name })
+  } else {
+    await update(ref(db, `rooms/${code}/players/${uid}`), {
+      name,
+      score: 0,
+      isHost: false,
+      joinedAt: serverTimestamp(),
+    })
+  }
   return { code, uid }
+}
+
+// Is this uid still a member of the room? Used to validate a remembered session
+// before auto-rejoining.
+export async function playerExists(code, uid) {
+  const snap = await get(ref(db, `rooms/${code}/players/${uid}`))
+  return snap.exists()
 }
 
 // Subscribe to the whole room. Returns the unsubscribe function.

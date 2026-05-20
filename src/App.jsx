@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Home from './components/Home'
 import CreateForm from './components/CreateForm'
 import JoinForm from './components/JoinForm'
@@ -6,8 +6,15 @@ import Lobby from './components/Lobby'
 import Game from './components/Game'
 import SetupNotice from './components/SetupNotice'
 import useRoom from './hooks/useRoom'
-import { isConfigured } from './lib/firebase'
-import { createRoom, joinRoom, leaveRoom, startGame } from './lib/rooms'
+import { isConfigured, ensureAuth } from './lib/firebase'
+import {
+  createRoom,
+  joinRoom,
+  leaveRoom,
+  startGame,
+  playerExists,
+} from './lib/rooms'
+import { saveSession, loadSession, clearSession } from './lib/session'
 
 function Shell({ children }) {
   return (
@@ -20,6 +27,42 @@ function App() {
   const [session, setSession] = useState(null) // { code, uid }
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  // Only "restoring" when there's a backend to restore against.
+  const [restoring, setRestoring] = useState(isConfigured)
+  const [inviteCode, setInviteCode] = useState('')
+
+  // On load: rejoin a remembered room (survives refresh/disconnect), otherwise
+  // honor a ?room=CODE invite link by jumping to the prefilled join screen.
+  useEffect(() => {
+    if (!isConfigured) return
+    let cancelled = false
+    ;(async () => {
+      const saved = loadSession()
+      if (saved?.code) {
+        try {
+          const uid = await ensureAuth()
+          if (!cancelled && (await playerExists(saved.code, uid))) {
+            setSession({ code: saved.code, uid })
+            setRestoring(false)
+            return
+          }
+        } catch {
+          // fall through to invite/home
+        }
+        clearSession()
+      }
+      if (cancelled) return
+      const roomParam = new URLSearchParams(window.location.search).get('room')
+      if (roomParam && /^[A-Za-z]{4}$/.test(roomParam)) {
+        setInviteCode(roomParam.toUpperCase())
+        setView('join')
+      }
+      setRestoring(false)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const room = useRoom(session?.code)
 
@@ -28,6 +71,16 @@ function App() {
     return (
       <Shell>
         <SetupNotice />
+      </Shell>
+    )
+  }
+
+  if (restoring) {
+    return (
+      <Shell>
+        <div className="min-h-screen flex items-center justify-center text-slate-500">
+          Loading…
+        </div>
       </Shell>
     )
   }
@@ -41,7 +94,9 @@ function App() {
     setBusy(true)
     setError('')
     try {
-      setSession(await createRoom(name))
+      const s = await createRoom(name)
+      saveSession(s.code)
+      setSession(s)
     } catch (e) {
       setError(e.message || 'Could not create the room')
     } finally {
@@ -53,7 +108,9 @@ function App() {
     setBusy(true)
     setError('')
     try {
-      setSession(await joinRoom(name, code))
+      const s = await joinRoom(name, code)
+      saveSession(s.code)
+      setSession(s)
     } catch (e) {
       setError(e.message || 'Could not join the room')
     } finally {
@@ -69,6 +126,7 @@ function App() {
         // best-effort cleanup; leaving the view matters more than the write
       }
     }
+    clearSession()
     setSession(null)
     backHome()
   }
@@ -139,6 +197,7 @@ function App() {
           onBack={backHome}
           busy={busy}
           error={error}
+          initialCode={inviteCode}
         />
       )}
     </Shell>

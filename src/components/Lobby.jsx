@@ -2,19 +2,24 @@ import { useState } from 'react'
 
 function Lobby({ code, myUid, players, isHost, onLeave, onStart }) {
   const [copied, setCopied] = useState(false)
+  const [linkCopied, setLinkCopied] = useState(false)
 
   const minPlayers = 3
   const canStart = players.length >= minPlayers
+  const inviteLink = `${window.location.origin}/?room=${code}`
 
-  const handleCopy = async () => {
+  const copyText = async (text, setFlag) => {
     try {
-      await navigator.clipboard.writeText(code)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1500)
+      await navigator.clipboard.writeText(text)
+      setFlag(true)
+      setTimeout(() => setFlag(false), 1500)
     } catch {
       // clipboard may be unavailable (insecure context, browser permission); silently no-op
     }
   }
+
+  const handleCopy = () => copyText(code, setCopied)
+  const handleCopyLink = () => copyText(inviteLink, setLinkCopied)
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-6 py-12">
@@ -38,8 +43,14 @@ function Lobby({ code, myUid, players, isHost, onLeave, onStart }) {
             {code}
           </button>
           <p className="text-slate-500 text-sm mt-3">
-            {copied ? 'Copied!' : 'Click code to copy. Share with friends.'}
+            {copied ? 'Code copied!' : 'Tap the code to copy it.'}
           </p>
+          <button
+            onClick={handleCopyLink}
+            className="mt-4 rounded-lg border border-slate-700 hover:border-purple-500 hover:text-purple-300 px-5 py-2 text-sm font-medium transition"
+          >
+            {linkCopied ? 'Invite link copied!' : 'Copy invite link'}
+          </button>
         </div>
 
         <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6 mb-4">
