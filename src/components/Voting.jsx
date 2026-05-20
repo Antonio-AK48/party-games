@@ -1,27 +1,28 @@
-import { useEffect, useState } from 'react'
-import Timer from './Timer'
+import { useState } from 'react'
+import TimerBar from './TimerBar'
 
-const VOTE_SECONDS = 25
-
-function Voting({ prompt, answers, isAuthor, step, totalSteps, onVote, onNext }) {
-  const [voted, setVoted] = useState(null)
-  const [autoAdvance, setAutoAdvance] = useState(false)
+function Voting({
+  prompt,
+  answers,
+  isAuthor,
+  votedIndex,
+  step,
+  totalSteps,
+  secondsLeft,
+  total,
+  onVote,
+}) {
+  // votedIndex comes from the room (survives refresh); picked is the optimistic
+  // local choice so the UI reacts instantly before RTDB echoes it back.
+  const [picked, setPicked] = useState(votedIndex)
+  const selected = picked ?? votedIndex
+  const locked = selected != null
 
   const handleVote = (index) => {
-    if (voted !== null) return
-    setVoted(index)
+    if (locked) return
+    setPicked(index)
     onVote?.(index)
   }
-
-  const handleExpire = () => {
-    setAutoAdvance(true)
-  }
-
-  useEffect(() => {
-    if (!autoAdvance) return
-    const id = setTimeout(() => onNext?.(), 1200)
-    return () => clearTimeout(id)
-  }, [autoAdvance, onNext])
 
   if (isAuthor) {
     return (
@@ -34,7 +35,7 @@ function Voting({ prompt, answers, isAuthor, step, totalSteps, onVote, onNext })
             {prompt}
           </h2>
 
-          <Timer seconds={VOTE_SECONDS} onExpire={handleExpire} />
+          <TimerBar secondsLeft={secondsLeft} total={total} />
 
           <div className="space-y-4">
             {answers.map((text, i) => (
@@ -47,21 +48,9 @@ function Voting({ prompt, answers, isAuthor, step, totalSteps, onVote, onNext })
             ))}
           </div>
 
-          <div className="text-center mt-8 space-y-3">
-            <p className="text-slate-400">
-              You're in this matchup — sit back while the others vote.
-            </p>
-            {autoAdvance ? (
-              <p className="text-slate-500 text-sm">Time's up — revealing…</p>
-            ) : (
-              <button
-                onClick={onNext}
-                className="rounded-lg bg-purple-600 hover:bg-purple-500 px-6 py-3 font-semibold transition"
-              >
-                Reveal results →
-              </button>
-            )}
-          </div>
+          <p className="text-center text-slate-400 mt-8">
+            You're in this matchup — sit back while the others vote.
+          </p>
         </div>
       </div>
     )
@@ -77,17 +66,17 @@ function Voting({ prompt, answers, isAuthor, step, totalSteps, onVote, onNext })
           {prompt}
         </h2>
 
-        <Timer seconds={VOTE_SECONDS} onExpire={handleExpire} />
+        <TimerBar secondsLeft={secondsLeft} total={total} />
 
         <div className="space-y-4">
           {answers.map((text, i) => {
-            const isPicked = voted === i
-            const isDimmed = voted !== null && !isPicked
+            const isPicked = selected === i
+            const isDimmed = locked && !isPicked
             return (
               <button
                 key={i}
                 onClick={() => handleVote(i)}
-                disabled={voted !== null}
+                disabled={locked}
                 className={`w-full text-left rounded-2xl border p-6 transition ${
                   isPicked
                     ? 'border-purple-500 bg-purple-950/40'
@@ -102,25 +91,9 @@ function Voting({ prompt, answers, isAuthor, step, totalSteps, onVote, onNext })
           })}
         </div>
 
-        {voted !== null && (
-          <div className="text-center mt-8 space-y-3">
-            <p className="text-slate-400">Locked in. Waiting for others…</p>
-            {autoAdvance ? (
-              <p className="text-slate-500 text-sm">Time's up — revealing…</p>
-            ) : (
-              <button
-                onClick={onNext}
-                className="rounded-lg bg-purple-600 hover:bg-purple-500 px-6 py-3 font-semibold transition"
-              >
-                Reveal results →
-              </button>
-            )}
-          </div>
-        )}
-
-        {voted === null && autoAdvance && (
-          <p className="text-center text-slate-500 text-sm mt-8">
-            Time's up — no vote cast.
+        {locked && (
+          <p className="text-center text-slate-400 mt-8">
+            Locked in. Waiting for the others…
           </p>
         )}
       </div>

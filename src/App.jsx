@@ -4,53 +4,121 @@ import CreateForm from './components/CreateForm'
 import JoinForm from './components/JoinForm'
 import Lobby from './components/Lobby'
 import Game from './components/Game'
+import SetupNotice from './components/SetupNotice'
+import useRoom from './hooks/useRoom'
+import { isConfigured } from './lib/firebase'
+import { createRoom, joinRoom, leaveRoom, startGame } from './lib/rooms'
 
-function generateRoomCode() {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-  return Array.from(
-    { length: 4 },
-    () => chars[Math.floor(Math.random() * chars.length)]
-  ).join('')
-}
-
-function seedPlayers(playerName) {
-  return [
-    { name: playerName, score: 0 },
-    { name: 'Tarek', score: 0 },
-    { name: 'Layla', score: 0 },
-    { name: 'Karim', score: 0 },
-  ]
+function Shell({ children }) {
+  return (
+    <main className="min-h-screen bg-slate-950 text-slate-100">{children}</main>
+  )
 }
 
 function App() {
-  const [view, setView] = useState('home')
-  const [playerName, setPlayerName] = useState('')
-  const [roomCode, setRoomCode] = useState('')
-  const [players, setPlayers] = useState([])
+  const [view, setView] = useState('home') // 'home' | 'create' | 'join'
+  const [session, setSession] = useState(null) // { code, uid }
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
 
-  const goHome = () => {
+  const room = useRoom(session?.code)
+
+  // Until Firebase keys are filled in, nothing else can work — guide the user.
+  if (!isConfigured) {
+    return (
+      <Shell>
+        <SetupNotice />
+      </Shell>
+    )
+  }
+
+  const backHome = () => {
     setView('home')
-    setPlayerName('')
-    setRoomCode('')
-    setPlayers([])
+    setError('')
   }
 
-  const handleCreateRoom = (name) => {
-    setPlayerName(name)
-    setRoomCode(generateRoomCode())
-    setPlayers(seedPlayers(name))
-    setView('lobby')
+  const handleCreate = async (name) => {
+    setBusy(true)
+    setError('')
+    try {
+      setSession(await createRoom(name))
+    } catch (e) {
+      setError(e.message || 'Could not create the room')
+    } finally {
+      setBusy(false)
+    }
   }
 
-  const handleJoinRoom = (name, code) => {
-    setPlayerName(name)
-    setRoomCode(code)
-    setPlayers(seedPlayers(name))
-    setView('lobby')
+  const handleJoin = async (name, code) => {
+    setBusy(true)
+    setError('')
+    try {
+      setSession(await joinRoom(name, code))
+    } catch (e) {
+      setError(e.message || 'Could not join the room')
+    } finally {
+      setBusy(false)
+    }
   }
 
+  const handleLeave = async () => {
+    if (session) {
+      try {
+        await leaveRoom(session.code, session.uid)
+      } catch {
+        // best-effort cleanup; leaving the view matters more than the write
+      }
+    }
+    setSession(null)
+    backHome()
+  }
+
+  // ---- In a room: render lobby or game from live room state ----------------
+  if (session) {
+    const status = room?.meta?.status
+    const players = room?.players
+      ? Object.entries(room.players)
+          .map(([uid, p]) => ({
+            uid,
+            name: p.name,
+            score: p.score || 0,
+            joinedAt: p.joinedAt || 0,
+          }))
+          .sort((a, b) => a.joinedAt - b.joinedAt)
+      : []
+    const isHost = room?.meta?.hostId === session.uid
+
+    if (!status || status === 'lobby') {
+      return (
+        <Shell>
+          <Lobby
+            code={session.code}
+            myUid={session.uid}
+            players={players}
+            isHost={isHost}
+            onLeave={handleLeave}
+            onStart={() => startGame(session.code)}
+          />
+        </Shell>
+      )
+    }
+
+    return (
+      <Shell>
+        <Game
+          room={room}
+          code={session.code}
+          uid={session.uid}
+          isHost={isHost}
+          onLeave={handleLeave}
+        />
+      </Shell>
+    )
+  }
+
+  // ---- Not in a room: home / create / join --------------------------------
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100">
+    <Shell>
       {view === 'home' && (
         <Home
           onCreate={() => setView('create')}
@@ -58,24 +126,22 @@ function App() {
         />
       )}
       {view === 'create' && (
-        <CreateForm onSubmit={handleCreateRoom} onBack={goHome} />
-      )}
-      {view === 'join' && (
-        <JoinForm onSubmit={handleJoinRoom} onBack={goHome} />
-      )}
-      {view === 'lobby' && (
-        <Lobby
-          code={roomCode}
-          playerName={playerName}
-          players={players}
-          onLeave={goHome}
-          onStart={() => setView('game')}
+        <CreateForm
+          onSubmit={handleCreate}
+          onBack={backHome}
+          busy={busy}
+          error={error}
         />
       )}
-      {view === 'game' && (
-        <Game playerName={playerName} players={players} onLeave={goHome} />
+      {view === 'join' && (
+        <JoinForm
+          onSubmit={handleJoin}
+          onBack={backHome}
+          busy={busy}
+          error={error}
+        />
       )}
-    </main>
+    </Shell>
   )
 }
 

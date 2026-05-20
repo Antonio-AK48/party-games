@@ -1,37 +1,30 @@
-import { useEffect, useState } from 'react'
-import Timer from './Timer'
+import { useEffect, useRef, useState } from 'react'
+import TimerBar from './TimerBar'
 
-const ANSWER_SECONDS = 60
-
-function Prompt({ prompt, step, totalSteps, onSubmit, onNext }) {
+function Prompt({ prompt, step, totalSteps, secondsLeft, total, onSubmit }) {
   const [answer, setAnswer] = useState('')
   const [submitted, setSubmitted] = useState(false)
-  const [autoAdvance, setAutoAdvance] = useState(false)
+  const submittedRef = useRef(false)
 
   const doSubmit = (text) => {
+    if (submittedRef.current) return
+    submittedRef.current = true
     setSubmitted(true)
     onSubmit?.(text)
   }
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    if (!answer.trim()) return
-    doSubmit(answer.trim())
+    if (answer.trim()) doSubmit(answer.trim())
   }
 
-  const handleExpire = () => {
-    if (submitted) return
-    doSubmit(answer.trim() || '(no answer)')
-    setAutoAdvance(true)
-  }
-
+  // Time ran out before submitting — lock in whatever's typed (or nothing).
   useEffect(() => {
-    if (!autoAdvance) return
-    const id = setTimeout(() => onNext?.(), 1500)
-    return () => clearTimeout(id)
-  }, [autoAdvance, onNext])
-
-  const isLast = step >= totalSteps
+    if (secondsLeft === 0 && !submittedRef.current) {
+      doSubmit(answer.trim() || '(no answer)')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [secondsLeft])
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-6 py-12">
@@ -43,7 +36,7 @@ function Prompt({ prompt, step, totalSteps, onSubmit, onNext }) {
           {prompt}
         </h2>
 
-        {!submitted && <Timer seconds={ANSWER_SECONDS} onExpire={handleExpire} />}
+        {!submitted && <TimerBar secondsLeft={secondsLeft} total={total} />}
 
         {!submitted ? (
           <form onSubmit={handleSubmit} className="space-y-5">
@@ -76,16 +69,9 @@ function Prompt({ prompt, step, totalSteps, onSubmit, onNext }) {
               </p>
               <p className="text-xl font-medium">{answer || '(no answer)'}</p>
             </div>
-            {autoAdvance ? (
-              <p className="text-slate-500 text-sm">Time's up — moving on…</p>
-            ) : (
-              <button
-                onClick={onNext}
-                className="w-full rounded-lg bg-purple-600 hover:bg-purple-500 py-3 font-semibold transition"
-              >
-                {isLast ? 'Done →' : 'Next prompt →'}
-              </button>
-            )}
+            <p className="text-slate-500 text-sm">
+              Locked in — waiting for the others…
+            </p>
           </div>
         )}
       </div>

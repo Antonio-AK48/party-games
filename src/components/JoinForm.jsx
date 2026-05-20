@@ -1,10 +1,10 @@
 import { useState } from 'react'
 
-function JoinForm({ onSubmit, onBack }) {
+function JoinForm({ onSubmit, onBack, busy, error }) {
   const [name, setName] = useState('')
   const [code, setCode] = useState('')
 
-  const canSubmit = name.trim() && code.length === 4
+  const canSubmit = name.trim() && code.length === 4 && !busy
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -70,8 +70,12 @@ function JoinForm({ onSubmit, onBack }) {
             disabled={!canSubmit}
             className="w-full rounded-lg bg-purple-600 hover:bg-purple-500 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed py-3 font-semibold transition"
           >
-            Join Room
+            {busy ? 'Joining…' : 'Join Room'}
           </button>
+
+          {error && (
+            <p className="text-sm text-red-400 text-center">{error}</p>
+          )}
         </form>
       </div>
     </div>

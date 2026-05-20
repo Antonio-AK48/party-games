@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-function Lobby({ code, playerName, players, onLeave, onStart }) {
+function Lobby({ code, myUid, players, isHost, onLeave, onStart }) {
   const [copied, setCopied] = useState(false)
 
   const minPlayers = 3
@@ -48,12 +48,12 @@ function Lobby({ code, playerName, players, onLeave, onStart }) {
           </h3>
           <ul className="space-y-3">
             {players.map((p) => (
-              <li key={p.name} className="flex items-center gap-3">
+              <li key={p.uid} className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-full bg-purple-600 flex items-center justify-center font-semibold">
                   {p.name[0]?.toUpperCase()}
                 </div>
                 <span className="font-medium">{p.name}</span>
-                {p.name === playerName && (
+                {p.uid === myUid && (
                   <span className="ml-auto text-xs uppercase tracking-wider text-slate-500">
                     you
                   </span>
@@ -63,15 +63,21 @@ function Lobby({ code, playerName, players, onLeave, onStart }) {
           </ul>
         </div>
 
-        <button
-          onClick={onStart}
-          disabled={!canStart}
-          className="w-full rounded-lg bg-purple-600 hover:bg-purple-500 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed py-3 font-semibold transition"
-        >
-          {canStart
-            ? 'Start Game'
-            : `Waiting for players (need ${minPlayers - players.length} more)`}
-        </button>
+        {isHost ? (
+          <button
+            onClick={onStart}
+            disabled={!canStart}
+            className="w-full rounded-lg bg-purple-600 hover:bg-purple-500 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed py-3 font-semibold transition"
+          >
+            {canStart
+              ? 'Start Game'
+              : `Waiting for players (need ${minPlayers - players.length} more)`}
+          </button>
+        ) : (
+          <div className="w-full rounded-lg bg-slate-800 text-slate-400 py-3 font-semibold text-center">
+            Waiting for the host to start…
+          </div>
+        )}
       </div>
     </div>
   )

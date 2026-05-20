@@ -1,11 +1,11 @@
 import { useState } from 'react'
 
-function CreateForm({ onSubmit, onBack }) {
+function CreateForm({ onSubmit, onBack, busy, error }) {
   const [name, setName] = useState('')
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    if (name.trim()) onSubmit(name.trim())
+    if (name.trim() && !busy) onSubmit(name.trim())
   }
 
   return (
@@ -45,11 +45,15 @@ function CreateForm({ onSubmit, onBack }) {
 
           <button
             type="submit"
-            disabled={!name.trim()}
+            disabled={!name.trim() || busy}
             className="w-full rounded-lg bg-purple-600 hover:bg-purple-500 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed py-3 font-semibold transition"
           >
-            Create Room
+            {busy ? 'Creating…' : 'Create Room'}
           </button>
+
+          {error && (
+            <p className="text-sm text-red-400 text-center">{error}</p>
+          )}
         </form>
       </div>
     </div>

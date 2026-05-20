@@ -1,4 +1,4 @@
-function RoundResults({ prompt, answers, step, totalSteps, onNext }) {
+function RoundResults({ prompt, answers, step, totalSteps }) {
   const totalVotes = answers.reduce((sum, a) => sum + a.votes, 0) || 1
   const winner = answers.reduce(
     (best, a) => (a.votes > best.votes ? a : best),
@@ -54,14 +54,9 @@ function RoundResults({ prompt, answers, step, totalSteps, onNext }) {
           })}
         </div>
 
-        <div className="text-center mt-8">
-          <button
-            onClick={onNext}
-            className="rounded-lg bg-purple-600 hover:bg-purple-500 px-6 py-3 font-semibold transition"
-          >
-            {isLast ? 'See scoreboard →' : 'Next matchup →'}
-          </button>
-        </div>
+        <p className="text-center text-slate-500 text-sm mt-8">
+          {isLast ? 'Tallying the scoreboard…' : 'Next matchup coming up…'}
+        </p>
       </div>
     </div>
   )

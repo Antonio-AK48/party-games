@@ -1,4 +1,4 @@
-function Scoreboard({ players, isFinal, onNext, onLeave }) {
+function Scoreboard({ players, isFinal, isHost, onNext, onLeave }) {
   const sorted = [...players].sort((a, b) => b.score - a.score)
   const top = sorted[0]?.score || 1
 
@@ -42,14 +42,19 @@ function Scoreboard({ players, isFinal, onNext, onLeave }) {
         </ol>
 
         <div className="flex flex-col sm:flex-row gap-3 mt-10">
-          {!isFinal && (
-            <button
-              onClick={onNext}
-              className="flex-1 rounded-lg bg-purple-600 hover:bg-purple-500 py-3 font-semibold transition"
-            >
-              Next Round →
-            </button>
-          )}
+          {!isFinal &&
+            (isHost ? (
+              <button
+                onClick={onNext}
+                className="flex-1 rounded-lg bg-purple-600 hover:bg-purple-500 py-3 font-semibold transition"
+              >
+                Next Round →
+              </button>
+            ) : (
+              <div className="flex-1 rounded-lg bg-slate-800 text-slate-400 py-3 font-semibold text-center">
+                Waiting for the host…
+              </div>
+            ))}
           <button
             onClick={onLeave}
             className={`rounded-lg border border-slate-800 hover:bg-slate-900 py-3 px-6 font-semibold transition ${
