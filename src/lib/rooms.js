@@ -8,7 +8,12 @@ import {
   serverTimestamp,
 } from 'firebase/database'
 import { db, ensureAuth } from './firebase'
-import { buildMatchups, ANSWER_MS } from './game'
+import {
+  buildMatchups,
+  buildPromptOrder,
+  ROUND_INTRO_MS,
+  TIEBREAKER_SCORES_MS,
+} from './game'
 
 // ---- Room data model (Realtime Database) -----------------------------------
 // rooms/{CODE}
@@ -42,7 +47,7 @@ async function freshCode() {
 
 // ---- Lobby -----------------------------------------------------------------
 
-export async function createRoom(name) {
+export async function createRoom(name, avatar) {
   const uid = await ensureAuth()
   const code = await freshCode()
   await set(ref(db, `rooms/${code}`), {
@@ -53,13 +58,19 @@ export async function createRoom(name) {
       createdAt: serverTimestamp(),
     },
     players: {
-      [uid]: { name, score: 0, isHost: true, joinedAt: serverTimestamp() },
+      [uid]: {
+        name,
+        avatar: avatar || null,
+        score: 0,
+        isHost: true,
+        joinedAt: serverTimestamp(),
+      },
     },
   })
   return { code, uid }
 }
 
-export async function joinRoom(name, code) {
+export async function joinRoom(name, code, avatar) {
   const uid = await ensureAuth()
   const [metaSnap, playerSnap] = await Promise.all([
     get(ref(db, `rooms/${code}/meta`)),
@@ -73,10 +84,14 @@ export async function joinRoom(name, code) {
     throw new Error('That game has already started')
   }
   if (alreadyIn) {
-    await update(ref(db, `rooms/${code}/players/${uid}`), { name })
+    await update(ref(db, `rooms/${code}/players/${uid}`), {
+      name,
+      avatar: avatar || null,
+    })
   } else {
     await update(ref(db, `rooms/${code}/players/${uid}`), {
       name,
+      avatar: avatar || null,
       score: 0,
       isHost: false,
       joinedAt: serverTimestamp(),
@@ -111,20 +126,37 @@ async function playersOrdered(code) {
     .sort((a, b) => a.joinedAt - b.joinedAt)
 }
 
-// Build a round's matchups and open the answering phase, atomically.
+// Build a round's matchups and open the round-intro splash. The host loop then
+// auto-advances to 'answering' once the splash duration elapses. Matchups are
+// written here (not later) so all clients can pre-load them during the splash.
 async function beginRound(code, round) {
-  const players = await playersOrdered(code)
-  const matchups = buildMatchups(players, round)
+  const [players, orderSnap] = await Promise.all([
+    playersOrdered(code),
+    get(ref(db, `rooms/${code}/meta/promptOrder`)),
+  ])
+  const matchups = buildMatchups(players, round, orderSnap.val())
   await update(ref(db), {
     [`rooms/${code}/rounds/${round}/matchups`]: matchups,
-    [`rooms/${code}/meta/status`]: 'answering',
+    [`rooms/${code}/meta/status`]: 'round-intro',
     [`rooms/${code}/meta/round`]: round,
     [`rooms/${code}/meta/voteIndex`]: 0,
-    [`rooms/${code}/meta/phaseEndsAt`]: Date.now() + ANSWER_MS,
+    [`rooms/${code}/meta/phaseEndsAt`]: Date.now() + ROUND_INTRO_MS,
   })
 }
 
-export function startGame(code) {
+// Splash → answering. Called by the host loop when the round-intro deadline
+// passes. Kept as a tiny helper so the host loop stays declarative.
+export async function startAnswering(code, durationMs) {
+  await update(ref(db, `rooms/${code}/meta`), {
+    status: 'answering',
+    phaseEndsAt: Date.now() + durationMs,
+  })
+}
+
+export async function startGame(code) {
+  await update(ref(db, `rooms/${code}/meta`), {
+    promptOrder: buildPromptOrder(),
+  })
   return beginRound(code, 1)
 }
 
@@ -147,6 +179,63 @@ export async function showResults(code, durationMs) {
     status: 'results',
     phaseEndsAt: Date.now() + durationMs,
   })
+}
+
+// ---- Tie-breaker (host) ----------------------------------------------------
+// Triggered only when the final round ends with exactly two players tied for
+// the top score. Stored at rooms/{code}/tiebreaker with the same shape as a
+// matchup (authors/answers/votes), but lives outside the rounds tree so it
+// doesn't disturb the regular round flow. authors[0] and authors[1] are the
+// tied players. Non-authors vote; vote winner gets +1 score to break the tie.
+
+export async function startTiebreaker(code, scores, authors) {
+  // Enter the tie-breaker through the standings splash, not straight into the
+  // prompt — gives everyone a beat to see who tied before the roast battle.
+  const updates = {
+    [`rooms/${code}/tiebreaker`]: { authors },
+    [`rooms/${code}/meta/status`]: 'tiebreaker-scores',
+    [`rooms/${code}/meta/phaseEndsAt`]: Date.now() + TIEBREAKER_SCORES_MS,
+  }
+  Object.entries(scores).forEach(([uid, score]) => {
+    updates[`rooms/${code}/players/${uid}/score`] = score
+  })
+  await update(ref(db), updates)
+}
+
+export async function showTiebreakerVersus(code, durationMs) {
+  await update(ref(db, `rooms/${code}/meta`), {
+    status: 'tiebreaker-versus',
+    phaseEndsAt: Date.now() + durationMs,
+  })
+}
+
+export async function startTiebreakerAnswering(code, durationMs) {
+  await update(ref(db, `rooms/${code}/meta`), {
+    status: 'tiebreaker-answering',
+    phaseEndsAt: Date.now() + durationMs,
+  })
+}
+
+export async function startTiebreakerVoting(code, durationMs) {
+  await update(ref(db, `rooms/${code}/meta`), {
+    status: 'tiebreaker-voting',
+    phaseEndsAt: Date.now() + durationMs,
+  })
+}
+
+export async function showTiebreakerResults(code, durationMs) {
+  await update(ref(db, `rooms/${code}/meta`), {
+    status: 'tiebreaker-results',
+    phaseEndsAt: Date.now() + durationMs,
+  })
+}
+
+export async function submitTiebreakerAnswer(code, uid, text) {
+  await set(ref(db, `rooms/${code}/tiebreaker/answers/${uid}`), text)
+}
+
+export async function submitTiebreakerVote(code, voterUid, authorUid) {
+  await set(ref(db, `rooms/${code}/tiebreaker/votes/${voterUid}`), authorUid)
 }
 
 export async function applyScores(code, scores) {

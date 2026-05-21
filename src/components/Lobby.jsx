@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import Avatar from './Avatar'
 
 function Lobby({ code, myUid, players, isHost, onLeave, onStart }) {
   const [copied, setCopied] = useState(false)
@@ -60,9 +61,7 @@ function Lobby({ code, myUid, players, isHost, onLeave, onStart }) {
           <ul className="space-y-3">
             {players.map((p) => (
               <li key={p.uid} className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-purple-600 flex items-center justify-center font-semibold">
-                  {p.name[0]?.toUpperCase()}
-                </div>
+                <Avatar name={p.name} avatar={p.avatar} />
                 <span className="font-medium">{p.name}</span>
                 {p.uid === myUid && (
                   <span className="ml-auto text-xs uppercase tracking-wider text-slate-500">
@@ -82,7 +81,7 @@ function Lobby({ code, myUid, players, isHost, onLeave, onStart }) {
           >
             {canStart
               ? 'Start Game'
-              : `Waiting for players (need ${minPlayers - players.length} more)`}
+              : `Waiting for players… (${minPlayers}+ needed)`}
           </button>
         ) : (
           <div className="w-full rounded-lg bg-slate-800 text-slate-400 py-3 font-semibold text-center">

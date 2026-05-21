@@ -1,4 +1,6 @@
-function RoundResults({ prompt, answers, step, totalSteps }) {
+import Avatar from './Avatar'
+
+function RoundResults({ prompt, answers, step, totalSteps, showPoints = true }) {
   const totalVotes = answers.reduce((sum, a) => sum + a.votes, 0) || 1
   const winner = answers.reduce(
     (best, a) => (a.votes > best.votes ? a : best),
@@ -36,13 +38,26 @@ function RoundResults({ prompt, answers, step, totalSteps }) {
                   style={{ width: `${pct}%` }}
                 />
                 <div className="relative flex items-center justify-between gap-4">
-                  <div>
-                    <p className="text-lg font-medium mb-1">{a.text}</p>
-                    <p className="text-sm text-slate-400">
-                      by {a.author} · +{a.votes * 100} pts
+                  <div className="min-w-0 flex-1">
+                    <p className="text-lg font-medium mb-1 break-words">{a.text}</p>
+                    <p className="text-sm text-slate-400 mb-2">
+                      by {a.author}
+                      {showPoints && ` · +${a.votes * 100} pts`}
                     </p>
+                    {a.voters.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {a.voters.map((v, vi) => (
+                          <Avatar
+                            key={vi}
+                            name={v.name}
+                            avatar={v.avatar}
+                            className="w-7 h-7 text-xs"
+                          />
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <div className="text-right">
+                  <div className="text-right shrink-0">
                     <p className="text-2xl font-bold">{a.votes}</p>
                     <p className="text-xs text-slate-500">
                       {a.votes === 1 ? 'vote' : 'votes'}

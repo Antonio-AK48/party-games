@@ -1,6 +1,26 @@
 import { useEffect, useRef } from 'react'
-import { startVoting, showResults, applyScores } from '../lib/rooms'
-import { VOTE_MS, RESULTS_MS, allAnswersIn, allVotesIn, tallyRound } from '../lib/game'
+import {
+  startAnswering,
+  startVoting,
+  showResults,
+  applyScores,
+  startTiebreaker,
+  showTiebreakerVersus,
+  startTiebreakerAnswering,
+  startTiebreakerVoting,
+  showTiebreakerResults,
+} from '../lib/rooms'
+import {
+  ANSWER_MS,
+  VOTE_MS,
+  RESULTS_MS,
+  TIEBREAKER_VS_MS,
+  TOTAL_ROUNDS,
+  allAnswersIn,
+  allVotesIn,
+  tallyRound,
+  findTopTie,
+} from '../lib/game'
 
 const toArray = (x) => (!x ? [] : Array.isArray(x) ? x : Object.values(x))
 
@@ -46,7 +66,16 @@ export default function useHostLoop({ room, code, isHost }) {
       const expired = phaseEndsAt ? Date.now() >= phaseEndsAt : false
 
       try {
-        if (status === 'answering') {
+        if (status === 'round-intro' && expired) {
+          pendingRef.current = 'answering'
+          await startAnswering(code, ANSWER_MS)
+        } else if (status === 'tiebreaker-scores' && expired) {
+          pendingRef.current = 'tiebreaker-versus'
+          await showTiebreakerVersus(code, TIEBREAKER_VS_MS)
+        } else if (status === 'tiebreaker-versus' && expired) {
+          pendingRef.current = 'tiebreaker-answering'
+          await startTiebreakerAnswering(code, ANSWER_MS)
+        } else if (status === 'answering') {
           if (matchups.length && (allAnswersIn(matchups) || expired)) {
             pendingRef.current = 'voting'
             await startVoting(code, 0, VOTE_MS)
@@ -67,9 +96,63 @@ export default function useHostLoop({ room, code, isHost }) {
             players.forEach((p) => {
               scores[p.uid] = p.score + (gained[p.uid] || 0)
             })
-            pendingRef.current = 'scoreboard'
-            await applyScores(code, scores)
+            // Final-round 2-way tie at the top? Run a roast tie-breaker — but
+            // only if there's at least one non-tied player around to vote on
+            // it. 3+ way ties (and the edge case of 2 total players tying)
+            // fall through to scoreboard as a shared win.
+            const isFinal = round >= TOTAL_ROUNDS
+            const tied = isFinal ? findTopTie(scores) : []
+            if (tied.length === 2 && uids.length > 2) {
+              pendingRef.current = 'tiebreaker-scores'
+              await startTiebreaker(code, scores, tied)
+            } else {
+              pendingRef.current = 'scoreboard'
+              await applyScores(code, scores)
+            }
           }
+        } else if (status === 'tiebreaker-answering') {
+          const tb = r.tiebreaker || {}
+          const authors = toArray(tb.authors)
+          const answers = tb.answers || {}
+          const allIn =
+            authors.length > 0 && authors.every((u) => answers[u] != null)
+          if (allIn || expired) {
+            pendingRef.current = 'tiebreaker-voting'
+            await startTiebreakerVoting(code, VOTE_MS)
+          }
+        } else if (status === 'tiebreaker-voting') {
+          const tb = r.tiebreaker || {}
+          const authors = toArray(tb.authors)
+          const voters = uids.filter((u) => !authors.includes(u))
+          const votes = tb.votes || {}
+          const allVoted =
+            voters.length === 0 || voters.every((u) => votes[u] != null)
+          if (allVoted || expired) {
+            pendingRef.current = 'tiebreaker-results'
+            await showTiebreakerResults(code, RESULTS_MS)
+          }
+        } else if (status === 'tiebreaker-results' && expired) {
+          // Pick the roaster with the most votes; ties (rare — vote tie inside
+          // a tie-breaker) resolve to the first author by deterministic order.
+          const tb = r.tiebreaker || {}
+          const authors = toArray(tb.authors)
+          const votes = tb.votes || {}
+          const tally = {}
+          Object.values(votes).forEach((authorUid) => {
+            tally[authorUid] = (tally[authorUid] || 0) + 1
+          })
+          const winner = authors.reduce(
+            (best, uid) =>
+              (tally[uid] || 0) > (tally[best] || 0) ? uid : best,
+            authors[0]
+          )
+          const finalScores = {}
+          players.forEach((p) => {
+            finalScores[p.uid] = p.score
+          })
+          finalScores[winner] = (finalScores[winner] || 0) + 1
+          pendingRef.current = 'scoreboard'
+          await applyScores(code, finalScores)
         }
       } catch {
         // Write failed — drop the lock so the next tick retries.

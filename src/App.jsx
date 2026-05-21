@@ -90,11 +90,11 @@ function App() {
     setError('')
   }
 
-  const handleCreate = async (name) => {
+  const handleCreate = async (name, avatar) => {
     setBusy(true)
     setError('')
     try {
-      const s = await createRoom(name)
+      const s = await createRoom(name, avatar)
       saveSession(s.code)
       setSession(s)
     } catch (e) {
@@ -104,11 +104,11 @@ function App() {
     }
   }
 
-  const handleJoin = async (name, code) => {
+  const handleJoin = async (name, code, avatar) => {
     setBusy(true)
     setError('')
     try {
-      const s = await joinRoom(name, code)
+      const s = await joinRoom(name, code, avatar)
       saveSession(s.code)
       setSession(s)
     } catch (e) {
@@ -139,6 +139,7 @@ function App() {
           .map(([uid, p]) => ({
             uid,
             name: p.name,
+            avatar: p.avatar || null,
             score: p.score || 0,
             joinedAt: p.joinedAt || 0,
           }))

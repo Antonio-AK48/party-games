@@ -43,7 +43,7 @@ function Voting({
                 key={i}
                 className="rounded-2xl border border-slate-800 bg-slate-900 p-6"
               >
-                <p className="text-lg font-medium">{text}</p>
+                <p className="text-lg font-medium break-words">{text}</p>
               </div>
             ))}
           </div>
@@ -85,7 +85,7 @@ function Voting({
                     : 'border-slate-800 bg-slate-900 hover:border-slate-700 hover:bg-slate-800'
                 }`}
               >
-                <p className="text-lg font-medium">{text}</p>
+                <p className="text-lg font-medium break-words">{text}</p>
               </button>
             )
           })}

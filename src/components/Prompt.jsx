@@ -67,7 +67,7 @@ function Prompt({ prompt, step, totalSteps, secondsLeft, total, onSubmit }) {
               <p className="text-slate-400 text-sm uppercase tracking-wider mb-3">
                 Your answer
               </p>
-              <p className="text-xl font-medium">{answer || '(no answer)'}</p>
+              <p className="text-xl font-medium break-words">{answer || '(no answer)'}</p>
             </div>
             <p className="text-slate-500 text-sm">
               Locked in — waiting for the others…

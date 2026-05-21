@@ -1,16 +1,59 @@
+import { useEffect } from 'react'
+import confetti from 'canvas-confetti'
+import Avatar from './Avatar'
+
 function Scoreboard({ players, isFinal, isHost, onNext, onLeave }) {
   const sorted = [...players].sort((a, b) => b.score - a.score)
   const top = sorted[0]?.score || 1
+  const winner = sorted[0]
+  const winnerName = winner?.name
+
+  // Fire a confetti burst + delayed side cannons whenever this mounts in final
+  // state. Keying on winnerName avoids re-firing every time RTDB emits a new
+  // players reference with the same data.
+  useEffect(() => {
+    if (!isFinal || !winnerName) return
+    confetti({ particleCount: 140, spread: 80, origin: { y: 0.4 } })
+    const sideCannons = setTimeout(() => {
+      confetti({ particleCount: 60, angle: 60, spread: 65, origin: { x: 0, y: 0.6 } })
+      confetti({ particleCount: 60, angle: 120, spread: 65, origin: { x: 1, y: 0.6 } })
+    }, 400)
+    const finale = setTimeout(() => {
+      confetti({ particleCount: 100, spread: 100, startVelocity: 35, origin: { y: 0.5 } })
+    }, 1200)
+    return () => {
+      clearTimeout(sideCannons)
+      clearTimeout(finale)
+    }
+  }, [isFinal, winnerName])
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-6 py-12">
       <div className="w-full max-w-2xl">
-        <p className="text-slate-400 text-sm uppercase tracking-wider text-center mb-3">
-          {isFinal ? 'Final Scores' : 'Standings'}
-        </p>
-        <h2 className="text-4xl sm:text-5xl font-bold text-center mb-10">
-          {isFinal ? `${sorted[0]?.name} wins!` : 'Scoreboard'}
-        </h2>
+        {isFinal && winner ? (
+          <div className="flex flex-col items-center text-center mb-10">
+            <p className="text-slate-400 text-sm uppercase tracking-wider mb-6">
+              Final Scores
+            </p>
+            <Avatar
+              name={winner.name}
+              avatar={winner.avatar}
+              className="w-40 h-40 text-6xl ring-4 ring-purple-500 ring-offset-4 ring-offset-slate-950 mb-6"
+            />
+            <h2 className="text-4xl sm:text-5xl font-bold">
+              {winner.name} wins!
+            </h2>
+          </div>
+        ) : (
+          <>
+            <p className="text-slate-400 text-sm uppercase tracking-wider text-center mb-3">
+              Standings
+            </p>
+            <h2 className="text-4xl sm:text-5xl font-bold text-center mb-10">
+              Scoreboard
+            </h2>
+          </>
+        )}
 
         <ol className="space-y-3">
           {sorted.map((p, i) => {
@@ -28,9 +71,11 @@ function Scoreboard({ players, isFinal, isHost, onNext, onLeave }) {
                   <span className="text-2xl font-bold text-slate-500 w-8">
                     {i + 1}
                   </span>
-                  <div className="w-10 h-10 rounded-full bg-purple-600 flex items-center justify-center font-semibold">
-                    {p.name[0]?.toUpperCase()}
-                  </div>
+                  <Avatar
+                    name={p.name}
+                    avatar={p.avatar}
+                    className="w-10 h-10 text-base"
+                  />
                   <span className="text-lg font-medium flex-1">{p.name}</span>
                   <span className="text-2xl font-bold tabular-nums">
                     {p.score}
