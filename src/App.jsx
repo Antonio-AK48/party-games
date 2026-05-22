@@ -13,6 +13,7 @@ import {
   leaveRoom,
   startGame,
   playerExists,
+  claimAvatar,
 } from './lib/rooms'
 import { saveSession, loadSession, clearSession } from './lib/session'
 
@@ -90,11 +91,11 @@ function App() {
     setError('')
   }
 
-  const handleCreate = async (name, avatar) => {
+  const handleCreate = async (name) => {
     setBusy(true)
     setError('')
     try {
-      const s = await createRoom(name, avatar)
+      const s = await createRoom(name)
       saveSession(s.code)
       setSession(s)
     } catch (e) {
@@ -104,11 +105,11 @@ function App() {
     }
   }
 
-  const handleJoin = async (name, code, avatar) => {
+  const handleJoin = async (name, code) => {
     setBusy(true)
     setError('')
     try {
-      const s = await joinRoom(name, code, avatar)
+      const s = await joinRoom(name, code)
       saveSession(s.code)
       setSession(s)
     } catch (e) {
@@ -157,6 +158,7 @@ function App() {
             isHost={isHost}
             onLeave={handleLeave}
             onStart={() => startGame(session.code)}
+            onPickAvatar={(id) => claimAvatar(session.code, session.uid, id)}
           />
         </Shell>
       )

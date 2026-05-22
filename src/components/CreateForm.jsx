@@ -1,13 +1,11 @@
 import { useState } from 'react'
-import AvatarPicker from './AvatarPicker'
 
 function CreateForm({ onSubmit, onBack, busy, error }) {
   const [name, setName] = useState('')
-  const [avatar, setAvatar] = useState(null)
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    if (name.trim() && !busy) onSubmit(name.trim(), avatar)
+    if (name.trim() && !busy) onSubmit(name.trim())
   }
 
   return (
@@ -44,8 +42,6 @@ function CreateForm({ onSubmit, onBack, busy, error }) {
               className="w-full rounded-lg bg-slate-900 border border-slate-800 px-4 py-3 focus:outline-none focus:border-purple-500 transition"
             />
           </div>
-
-          <AvatarPicker value={avatar} onChange={setAvatar} />
 
           <button
             type="submit"

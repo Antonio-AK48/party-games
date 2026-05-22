@@ -25,3 +25,7 @@ dist-ssr
 
 # Claude Code session-local files
 .claude/
+
+# Raw AI-generated source images — only the cropped avatars in
+# src/assets/avatars/ are used by the app (see scripts/crop_avatars.py)
+Gemini_Generated_Image_*.png

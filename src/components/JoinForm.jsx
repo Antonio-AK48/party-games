@@ -1,16 +1,14 @@
 import { useState } from 'react'
-import AvatarPicker from './AvatarPicker'
 
 function JoinForm({ onSubmit, onBack, busy, error, initialCode = '' }) {
   const [name, setName] = useState('')
   const [code, setCode] = useState(initialCode)
-  const [avatar, setAvatar] = useState(null)
 
   const canSubmit = name.trim() && code.length === 4 && !busy
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    if (canSubmit) onSubmit(name.trim(), code, avatar)
+    if (canSubmit) onSubmit(name.trim(), code)
   }
 
   return (
@@ -66,8 +64,6 @@ function JoinForm({ onSubmit, onBack, busy, error, initialCode = '' }) {
               className="w-full rounded-lg bg-slate-900 border border-slate-800 px-4 py-3 focus:outline-none focus:border-purple-500 transition tracking-[0.5em] text-center text-3xl font-mono uppercase"
             />
           </div>
-
-          <AvatarPicker value={avatar} onChange={setAvatar} />
 
           <button
             type="submit"

@@ -5,6 +5,7 @@ import {
   update,
   onValue,
   remove,
+  runTransaction,
   serverTimestamp,
 } from 'firebase/database'
 import { db, ensureAuth } from './firebase'
@@ -47,7 +48,7 @@ async function freshCode() {
 
 // ---- Lobby -----------------------------------------------------------------
 
-export async function createRoom(name, avatar) {
+export async function createRoom(name) {
   const uid = await ensureAuth()
   const code = await freshCode()
   await set(ref(db, `rooms/${code}`), {
@@ -60,7 +61,7 @@ export async function createRoom(name, avatar) {
     players: {
       [uid]: {
         name,
-        avatar: avatar || null,
+        avatar: null, // chosen in the lobby (see claimAvatar)
         score: 0,
         isHost: true,
         joinedAt: serverTimestamp(),
@@ -70,7 +71,7 @@ export async function createRoom(name, avatar) {
   return { code, uid }
 }
 
-export async function joinRoom(name, code, avatar) {
+export async function joinRoom(name, code) {
   const uid = await ensureAuth()
   const [metaSnap, playerSnap] = await Promise.all([
     get(ref(db, `rooms/${code}/meta`)),
@@ -84,20 +85,39 @@ export async function joinRoom(name, code, avatar) {
     throw new Error('That game has already started')
   }
   if (alreadyIn) {
-    await update(ref(db, `rooms/${code}/players/${uid}`), {
-      name,
-      avatar: avatar || null,
-    })
+    // Rejoin: only refresh the name, never touch a previously-picked avatar.
+    await update(ref(db, `rooms/${code}/players/${uid}`), { name })
   } else {
     await update(ref(db, `rooms/${code}/players/${uid}`), {
       name,
-      avatar: avatar || null,
+      avatar: null, // chosen in the lobby (see claimAvatar)
       score: 0,
       isHost: false,
       joinedAt: serverTimestamp(),
     })
   }
   return { code, uid }
+}
+
+// Claim an avatar for this player, but only if no one else in the room already
+// has it. Runs as a transaction on the players node so two people confirming the
+// same avatar at the same time can't both win — the loser is told to pick again.
+export async function claimAvatar(code, uid, avatarId) {
+  const playersRef = ref(db, `rooms/${code}/players`)
+  const res = await runTransaction(playersRef, (players) => {
+    if (!players || !players[uid]) return players // nothing to update
+    if (avatarId) {
+      const takenByOther = Object.entries(players).some(
+        ([id, p]) => id !== uid && p && p.avatar === avatarId
+      )
+      if (takenByOther) return undefined // abort: someone beat us to it
+    }
+    players[uid].avatar = avatarId || null
+    return players
+  })
+  if (!res.committed) {
+    throw new Error('That avatar was just taken — pick another')
+  }
 }
 
 // Is this uid still a member of the room? Used to validate a remembered session
