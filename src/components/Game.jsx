@@ -18,6 +18,8 @@ import {
   TOTAL_ROUNDS,
   TIEBREAKER_PROMPT_TEMPLATE,
   TIEBREAKER_VOTE_HEADER,
+  scoreMatchup,
+  multiplierLabel,
 } from '../lib/game'
 
 const toArray = (x) => (!x ? [] : Array.isArray(x) ? x : Object.values(x))
@@ -67,6 +69,7 @@ function TiebreakerBadge({ children }) {
 }
 
 function RoundIntro({ round }) {
+  const multiplier = multiplierLabel(round)
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-6 py-12 text-center">
       <p className="text-slate-400 text-base uppercase tracking-[0.4em] mb-2">
@@ -78,6 +81,11 @@ function RoundIntro({ round }) {
       <p className="text-slate-600 text-sm mt-4 uppercase tracking-widest">
         of {TOTAL_ROUNDS}
       </p>
+      {multiplier && (
+        <p className="mt-8 rounded-full border border-amber-400/40 bg-amber-400/10 px-5 py-2 text-lg font-bold uppercase tracking-wide text-amber-300">
+          ⚡ {multiplier}
+        </p>
+      )}
     </div>
   )
 }
@@ -255,12 +263,21 @@ function Game({ room, code, uid, isHost, onLeave }) {
         avatar: player.avatar || null,
       })
     })
-    const answers = authors.map((a) => ({
-      text: (m.answers && m.answers[a]) || '(no answer)',
-      author: nameOf(a),
-      votes: Object.values(votes).filter((v) => v === a).length,
-      voters: votersByAuthor[a] || [],
-    }))
+    const breakdown = Object.fromEntries(
+      scoreMatchup(m, round).map((b) => [b.uid, b])
+    )
+    const answers = authors.map((a) => {
+      const b = breakdown[a] || { votes: 0, total: 0, bonus: 0, sweep: false }
+      return {
+        text: (m.answers && m.answers[a]) || '(no answer)',
+        author: nameOf(a),
+        votes: b.votes,
+        voters: votersByAuthor[a] || [],
+        points: b.total,
+        bonus: b.bonus,
+        sweep: b.sweep,
+      }
+    })
 
     return (
       <RoundBadge round={round}>

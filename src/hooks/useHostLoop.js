@@ -91,7 +91,7 @@ export default function useHostLoop({ room, code, isHost }) {
             pendingRef.current = 'voting'
             await startVoting(code, voteIndex + 1, VOTE_MS)
           } else {
-            const gained = tallyRound(matchups)
+            const gained = tallyRound(matchups, round)
             const scores = {}
             players.forEach((p) => {
               scores[p.uid] = p.score + (gained[p.uid] || 0)

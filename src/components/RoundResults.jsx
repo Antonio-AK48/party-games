@@ -42,8 +42,13 @@ function RoundResults({ prompt, answers, step, totalSteps, showPoints = true }) 
                     <p className="text-lg font-medium mb-1 break-words">{a.text}</p>
                     <p className="text-sm text-slate-400 mb-2">
                       by {a.author}
-                      {showPoints && ` · +${a.votes * 100} pts`}
+                      {showPoints && ` · +${a.points} pts`}
                     </p>
+                    {showPoints && a.sweep && (
+                      <p className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-amber-400/40 bg-amber-400/10 px-3 py-1 text-xs font-bold uppercase tracking-wide text-amber-300">
+                        🧹 Sweep! +{a.bonus} bonus
+                      </p>
+                    )}
                     {a.voters.length > 0 && (
                       <div className="flex flex-wrap gap-1.5">
                         {a.voters.map((v, vi) => (

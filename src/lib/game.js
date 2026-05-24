@@ -8,6 +8,12 @@ export const VOTE_MS = 20_000
 export const RESULTS_MS = 5_000
 export const TOTAL_ROUNDS = 3
 export const POINTS_PER_VOTE = 100
+// Later rounds are worth more (points = POINTS_PER_VOTE * round) so a player who
+// fell behind early can still mount a comeback in the final round. And sweeping
+// a matchup — winning EVERY vote when at least SWEEP_MIN_VOTERS people voted —
+// adds a SWEEP_BONUS_PCT bonus on top of that matchup's points. See scoreMatchup.
+export const SWEEP_BONUS_PCT = 0.5
+export const SWEEP_MIN_VOTERS = 2
 
 // Splash-screen durations between phases. Short enough not to be tedious, long
 // enough for everyone to take in what's happening (and for late joiners on the
@@ -45,25 +51,77 @@ const arr = (x) => (!x ? [] : Array.isArray(x) ? x : Object.values(x))
 export function buildMatchups(players, round, promptOrder) {
   const n = players.length
   const offset = (round - 1) * n
-  return players.map((p, i) => {
+  const used = []
+  const matchups = players.map((p, i) => {
     const authors = [p.uid, players[(i + 1) % n].uid]
     const idx = promptOrder[(offset + i) % promptOrder.length]
+    used.push(idx)
     const template = prompts[idx]
     return { prompt: fillPrompt(template, authors, players), authors }
   })
+  // Remember what this round showed so future games can avoid it (host-only;
+  // see buildPromptOrder). No-op if localStorage is unavailable.
+  rememberUsed(used)
+  return matchups
+}
+
+// ---- Cross-game no-repeat memory -------------------------------------------
+// A "new game" is a brand-new room with its own fresh shuffle, so on its own
+// nothing stops the same group from re-drawing prompts they just had last game.
+// We remember the prompt indices used recently (in this browser — the host
+// starts every game) and push them to the back of the next shuffle, so a fresh
+// game prefers prompts the group hasn't seen lately. Indices are safe keys
+// because the deck doesn't change mid-night.
+const RECENT_KEY = 'pg.recentPrompts'
+const RECENT_CAP = 120 // ~ a few games' worth; how long a prompt stays "cold"
+
+function recentlyUsed() {
+  try {
+    const raw = localStorage.getItem(RECENT_KEY)
+    const arr = raw ? JSON.parse(raw) : []
+    return Array.isArray(arr) ? arr : []
+  } catch {
+    return [] // localStorage unavailable (private mode, SSR) — degrade to plain shuffle
+  }
+}
+
+// Append the indices just used and keep only the most recent RECENT_CAP, de-duped
+// (last occurrence wins). Called as each round's matchups are built.
+function rememberUsed(indices) {
+  try {
+    const merged = [...recentlyUsed(), ...indices]
+    const seen = new Set()
+    const trimmed = []
+    for (let i = merged.length - 1; i >= 0 && trimmed.length < RECENT_CAP; i--) {
+      if (!seen.has(merged[i])) {
+        seen.add(merged[i])
+        trimmed.unshift(merged[i])
+      }
+    }
+    localStorage.setItem(RECENT_KEY, JSON.stringify(trimmed))
+  } catch {
+    // no-op: nothing remembered, next game just falls back to a plain shuffle
+  }
 }
 
 // Returns a randomly-ordered list of indices into the prompts deck (e.g. for a
 // 4-entry deck, something like [2, 0, 3, 1]). Called once when a game starts and
 // stored on room.meta.promptOrder so every round draws from the same shuffle
-// without repeating, and each new game sees a different order.
+// without repeating, and each new game sees a different order. Prompts used in
+// recent games are stable-partitioned to the back so a fresh game prefers ones
+// the group hasn't seen lately (see recentlyUsed/rememberUsed).
 export function buildPromptOrder() {
   const indices = prompts.map((_, i) => i)
   for (let i = indices.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1))
     ;[indices[i], indices[j]] = [indices[j], indices[i]]
   }
-  return indices
+  const recent = new Set(recentlyUsed())
+  const fresh = indices.filter((i) => !recent.has(i))
+  const stale = indices.filter((i) => recent.has(i))
+  // If every prompt is "recent" (very long night), fresh is empty and this is
+  // just the plain random shuffle — exactly the old behaviour.
+  return [...fresh, ...stale]
 }
 
 // Replace {player}/{player2} tokens with real names. Prefers players who aren't
@@ -107,12 +165,44 @@ export function allVotesIn(matchup, playerUids) {
   return voters.every((uid) => votes[uid] != null)
 }
 
-// Points earned this round, keyed by author uid (one award per vote received).
-export function tallyRound(matchups) {
+// Points a single vote is worth in this round. Round 1 = 1x, round 2 = 2x, etc.
+export function pointsPerVote(round) {
+  return POINTS_PER_VOTE * round
+}
+
+// Short label for the round's point multiplier, for the UI ('Double points',
+// 'Triple points', …). Returns null for round 1 (nothing to advertise).
+export function multiplierLabel(round) {
+  if (round <= 1) return null
+  if (round === 2) return 'Double points'
+  if (round === 3) return 'Triple points'
+  return `${round}× points`
+}
+
+// Per-author score breakdown for one matchup: { uid, votes, base, sweep, bonus,
+// total }. A "sweep" is winning every vote cast when at least SWEEP_MIN_VOTERS
+// people voted (a lone voter doesn't count) — it adds a SWEEP_BONUS_PCT bonus.
+export function scoreMatchup(matchup, round) {
+  const votes = matchup.votes || {}
+  const authors = arr(matchup.authors)
+  const voterCount = Object.keys(votes).length
+  const per = pointsPerVote(round)
+  return authors.map((uid) => {
+    const v = Object.values(votes).filter((a) => a === uid).length
+    const base = v * per
+    const sweep = voterCount >= SWEEP_MIN_VOTERS && v === voterCount
+    const bonus = sweep ? Math.round(base * SWEEP_BONUS_PCT) : 0
+    return { uid, votes: v, base, sweep, bonus, total: base + bonus }
+  })
+}
+
+// Points earned this round, keyed by author uid: votes scaled by the round
+// multiplier, plus any sweep bonuses.
+export function tallyRound(matchups, round) {
   const out = {}
   matchups.forEach((m) => {
-    Object.values(m.votes || {}).forEach((authorUid) => {
-      out[authorUid] = (out[authorUid] || 0) + POINTS_PER_VOTE
+    scoreMatchup(m, round).forEach(({ uid, total }) => {
+      out[uid] = (out[uid] || 0) + total
     })
   })
   return out
