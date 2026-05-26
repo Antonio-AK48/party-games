@@ -1,5 +1,22 @@
 import Avatar from './Avatar'
 
+// Coloured pill for a revealed wager outcome (bet or intervention).
+function WagerBadge({ children, result }) {
+  const tone =
+    result === 'win'
+      ? 'border-emerald-400/40 bg-emerald-400/10 text-emerald-300'
+      : result === 'lose'
+      ? 'border-rose-400/40 bg-rose-400/10 text-rose-300'
+      : 'border-slate-600/50 bg-slate-700/20 text-slate-300'
+  return (
+    <p
+      className={`mb-2 mr-2 inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wide ${tone}`}
+    >
+      {children}
+    </p>
+  )
+}
+
 function RoundResults({ prompt, answers, step, totalSteps, showPoints = true }) {
   const totalVotes = answers.reduce((sum, a) => sum + a.votes, 0) || 1
   const winner = answers.reduce(
@@ -42,12 +59,32 @@ function RoundResults({ prompt, answers, step, totalSteps, showPoints = true }) 
                     <p className="text-lg font-medium mb-1 break-words">{a.text}</p>
                     <p className="text-sm text-slate-400 mb-2">
                       by {a.author}
-                      {showPoints && ` · +${a.points} pts`}
+                      {showPoints && !a.intervention && ` · +${a.points} pts`}
                     </p>
                     {showPoints && a.sweep && (
                       <p className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-amber-400/40 bg-amber-400/10 px-3 py-1 text-xs font-bold uppercase tracking-wide text-amber-300">
                         🧹 Sweep! +{a.bonus} bonus
                       </p>
+                    )}
+                    {showPoints && a.bet && (
+                      <WagerBadge result={a.bet.result}>
+                        🎲 Bet{' '}
+                        {a.bet.result === 'win'
+                          ? `won +${a.bet.stake}`
+                          : a.bet.result === 'lose'
+                          ? `lost -${a.bet.stake}`
+                          : 'pushed'}
+                      </WagerBadge>
+                    )}
+                    {showPoints && a.intervention && (
+                      <WagerBadge result={a.intervention.result}>
+                        ⚡ Intervention{' '}
+                        {a.intervention.result === 'win'
+                          ? `won +${a.intervention.stake}`
+                          : a.intervention.result === 'lose'
+                          ? `flopped -${a.intervention.stake}`
+                          : 'survived'}
+                      </WagerBadge>
                     )}
                     {a.voters.length > 0 && (
                       <div className="flex flex-wrap gap-1.5">

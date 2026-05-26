@@ -15,6 +15,35 @@ export const POINTS_PER_VOTE = 100
 export const SWEEP_BONUS_PCT = 0.5
 export const SWEEP_MIN_VOTERS = 2
 
+// ---- Experimental wagers: betting + intervention (see lib/features.js) -------
+// Both are under playtest and may be removed. Values are intentionally simple to
+// reason about during a live game — tune freely. See settleMatchupWagers below.
+//   Betting:      round 1 starts everyone at 0, so betting opens in round 2. A
+//                 bet is even-money and you can only place it if you can cover
+//                 twice the stake (keeps any single bet ≤ ~half your score).
+//   Intervention: a voter becomes a third author, so it needs a crowd (≥6) and
+//                 the current top 2 are barred (anti-snowball + anti-spite).
+export const BET_FROM_ROUND = 2
+export const INTERVENTION_MIN_PLAYERS = 6
+export const INTERVENTION_EXCLUDE_TOP = 2
+// Even-money self-bet: win +stake / lose −stake, settled vs. your co-author only.
+export const betStake = (round) => POINTS_PER_VOTE * round
+// Risk-bet intervention: win +stake (strictly most votes) / lose −stake (dead last).
+export const interventionStake = (round) => POINTS_PER_VOTE * round * 2
+
+// ---- Round 3: "Author's Cut" — player-written prompts -----------------------
+// Every player writes one prompt; each prompt is then answered by
+// R3_ANSWERS_PER_PROMPT random non-authors (cyclic assignment so the load is
+// even); the prompt's author privately picks their favorite. Each chosen answer
+// pays R3_CHOSEN_POINTS. Sits outside the matchup engine — see the round3-*
+// statuses in useHostLoop and the Round3Judging / Round3Reveal components.
+export const R3_PROMPT_MS = 45_000
+export const R3_ANSWER_MS = 90_000
+export const R3_JUDGE_MS = 25_000
+export const R3_REVEAL_MS = 5_000
+export const R3_ANSWERS_PER_PROMPT = 3
+export const R3_CHOSEN_POINTS = 500
+
 // Splash-screen durations between phases. Short enough not to be tedious, long
 // enough for everyone to take in what's happening (and for late joiners on the
 // same screen to load).
@@ -156,10 +185,13 @@ export function allAnswersIn(matchups) {
   })
 }
 
-// Everyone who isn't an author of this matchup has cast a vote on it.
+// Everyone who isn't an author of this matchup has cast a vote on it. An
+// intervener becomes a third author (and forfeits their vote), so they're
+// excluded from the expected voters too.
 export function allVotesIn(matchup, playerUids) {
   const authors = arr(matchup.authors)
-  const voters = playerUids.filter((uid) => !authors.includes(uid))
+  const ivUid = matchup.intervention?.uid
+  const voters = playerUids.filter((uid) => !authors.includes(uid) && uid !== ivUid)
   if (voters.length === 0) return true
   const votes = matchup.votes || {}
   return voters.every((uid) => votes[uid] != null)
@@ -204,6 +236,142 @@ export function tallyRound(matchups, round) {
     scoreMatchup(m, round).forEach(({ uid, total }) => {
       out[uid] = (out[uid] || 0) + total
     })
+  })
+  return out
+}
+
+// ---- Experimental wagers (betting + intervention) --------------------------
+// Kept entirely separate from the base scoring above so the whole experiment can
+// be switched off (lib/features.js) or deleted without disturbing tallyRound.
+
+// Uids of the top n players by score, from a players map ({ uid: { score } }).
+// Used to bar the current leaders from intervening (INTERVENTION_EXCLUDE_TOP).
+export function topScorerUids(playersMap, n) {
+  return new Set(
+    Object.entries(playersMap || {})
+      .map(([uid, p]) => [uid, (p && p.score) || 0])
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, n)
+      .map(([uid]) => uid)
+  )
+}
+
+// Resolve one matchup's wagers for both display and scoring.
+//   bets:         settled author-vs-author ONLY — an intervention's votes never
+//                 touch a bet, so a hidden bet stays the fair 1v1 it was placed
+//                 as. win = more votes than your co-author, lose = fewer, push =
+//                 tie. Even money (delta = ±stake).
+//   intervention: settled against the field — win = strictly the most votes of
+//                 all answers, lose = strictly the fewest (dead last), push =
+//                 anything in between. Reward/risk = ±stake; no base points.
+// result is 'win' | 'lose' | 'push'; delta is the signed point change.
+export function settleMatchupWagers(matchup) {
+  const authors = arr(matchup.authors)
+  const votes = matchup.votes || {}
+  const countFor = (uid) => Object.values(votes).filter((a) => a === uid).length
+
+  const bets = {}
+  if (authors.length === 2) {
+    const [a, b] = authors
+    const va = countFor(a)
+    const vb = countFor(b)
+    Object.entries(matchup.bets || {}).forEach(([uid, stake]) => {
+      const mine = uid === a ? va : vb
+      const theirs = uid === a ? vb : va
+      const result = mine > theirs ? 'win' : mine < theirs ? 'lose' : 'push'
+      bets[uid] = {
+        stake,
+        result,
+        delta: result === 'win' ? stake : result === 'lose' ? -stake : 0,
+      }
+    })
+  }
+
+  let intervention = null
+  const iv = matchup.intervention
+  if (iv && iv.uid != null) {
+    const ivVotes = countFor(iv.uid)
+    const authorVotes = authors.map(countFor)
+    const result = authorVotes.every((v) => ivVotes > v)
+      ? 'win'
+      : authorVotes.every((v) => ivVotes < v)
+        ? 'lose'
+        : 'push'
+    intervention = {
+      uid: iv.uid,
+      stake: iv.stake,
+      votes: ivVotes,
+      result,
+      delta: result === 'win' ? iv.stake : result === 'lose' ? -iv.stake : 0,
+    }
+  }
+
+  return { bets, intervention }
+}
+
+// Net point deltas from every matchup's wagers, keyed by uid (can be negative).
+// Returns {} for a round with no bets or interventions, so it's a no-op when the
+// features are off (no such data is ever written).
+export function settleWagers(matchups) {
+  const out = {}
+  const add = (uid, d) => {
+    if (d) out[uid] = (out[uid] || 0) + d
+  }
+  matchups.forEach((m) => {
+    const { bets, intervention } = settleMatchupWagers(m)
+    Object.entries(bets).forEach(([uid, b]) => add(uid, b.delta))
+    if (intervention) add(intervention.uid, intervention.delta)
+  })
+  return out
+}
+
+// ---- Round 3 helpers --------------------------------------------------------
+
+// Turn the raw { uid: { text } } prompt submissions into the per-item structure
+// used for the rest of round 3. Each item gets `assigned`: the next k players in
+// the (shuffled) order, so every player ends up answering exactly k prompts and
+// every prompt receives exactly k answers. k clamps down gracefully if the room
+// has fewer than R3_ANSWERS_PER_PROMPT+1 players.
+export function buildRound3Items(prompts) {
+  const list = []
+  Object.entries(prompts || {}).forEach(([author, p]) => {
+    if (p && p.text) list.push({ author, text: p.text })
+  })
+  for (let i = list.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[list[i], list[j]] = [list[j], list[i]]
+  }
+  const n = list.length
+  const k = Math.min(R3_ANSWERS_PER_PROMPT, Math.max(0, n - 1))
+  return list.map((item, i) => ({
+    author: item.author,
+    text: item.text,
+    assigned: Array.from({ length: k }, (_, j) => list[(i + 1 + j) % n].author),
+  }))
+}
+
+// Every player submitted a prompt.
+export function allRound3PromptsIn(prompts, playerUids) {
+  return playerUids.every((uid) => prompts && prompts[uid] && prompts[uid].text)
+}
+
+// Every item has every assigned answerer's response in.
+export function allRound3AnswersIn(items) {
+  return items.every((it) =>
+    arr(it.assigned).every((uid) => it.answers && it.answers[uid] != null)
+  )
+}
+
+// Every item has a chosen winner picked (used to end judging early).
+export function allRound3Chosen(items) {
+  return items.every((it) => it.chosen != null)
+}
+
+// Round 3 scoring: each chosen answerer banks a flat R3_CHOSEN_POINTS.
+export function tallyRound3(items) {
+  const out = {}
+  ;(items || []).forEach((it) => {
+    if (it.chosen) out[it.chosen] = (out[it.chosen] || 0) + R3_CHOSEN_POINTS
   })
   return out
 }

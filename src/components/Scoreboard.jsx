@@ -1,8 +1,9 @@
 import { useEffect } from 'react'
 import confetti from 'canvas-confetti'
 import Avatar from './Avatar'
+import { sounds } from '../lib/sound'
 
-function Scoreboard({ players, isFinal, isHost, onNext, onLeave }) {
+function Scoreboard({ players, isFinal, isHost, onNext, onPlayAgain, onLeave }) {
   const sorted = [...players].sort((a, b) => b.score - a.score)
   const top = sorted[0]?.score || 1
   const winner = sorted[0]
@@ -13,6 +14,7 @@ function Scoreboard({ players, isFinal, isHost, onNext, onLeave }) {
   // players reference with the same data.
   useEffect(() => {
     if (!isFinal || !winnerName) return
+    sounds.winner()
     confetti({ particleCount: 140, spread: 80, origin: { y: 0.4 } })
     const sideCannons = setTimeout(() => {
       confetti({ particleCount: 60, angle: 60, spread: 65, origin: { x: 0, y: 0.6 } })
@@ -87,24 +89,21 @@ function Scoreboard({ players, isFinal, isHost, onNext, onLeave }) {
         </ol>
 
         <div className="flex flex-col sm:flex-row gap-3 mt-10">
-          {!isFinal &&
-            (isHost ? (
-              <button
-                onClick={onNext}
-                className="flex-1 rounded-lg bg-purple-600 hover:bg-purple-500 py-3 font-semibold transition"
-              >
-                Next Round →
-              </button>
-            ) : (
-              <div className="flex-1 rounded-lg bg-slate-800 text-slate-400 py-3 font-semibold text-center">
-                Waiting for the host…
-              </div>
-            ))}
+          {isHost ? (
+            <button
+              onClick={isFinal ? onPlayAgain : onNext}
+              className="flex-1 rounded-lg bg-purple-600 hover:bg-purple-500 py-3 font-semibold transition"
+            >
+              {isFinal ? 'Play Again ↻' : 'Next Round →'}
+            </button>
+          ) : (
+            <div className="flex-1 rounded-lg bg-slate-800 text-slate-400 py-3 font-semibold text-center">
+              Waiting for the host…
+            </div>
+          )}
           <button
             onClick={onLeave}
-            className={`rounded-lg border border-slate-800 hover:bg-slate-900 py-3 px-6 font-semibold transition ${
-              isFinal ? 'flex-1' : ''
-            }`}
+            className="rounded-lg border border-slate-800 hover:bg-slate-900 py-3 px-6 font-semibold transition"
           >
             {isFinal ? 'Back to Home' : 'Leave Game'}
           </button>

@@ -9,6 +9,11 @@ import {
   startTiebreakerAnswering,
   startTiebreakerVoting,
   showTiebreakerResults,
+  startRound3Prompts,
+  startRound3Answering,
+  startRound3Judging,
+  showRound3Reveal,
+  autopickRound3,
 } from '../lib/rooms'
 import {
   ANSWER_MS,
@@ -16,10 +21,18 @@ import {
   RESULTS_MS,
   TIEBREAKER_VS_MS,
   TOTAL_ROUNDS,
+  R3_PROMPT_MS,
+  R3_ANSWER_MS,
+  R3_JUDGE_MS,
+  R3_REVEAL_MS,
   allAnswersIn,
   allVotesIn,
   tallyRound,
+  settleWagers,
   findTopTie,
+  allRound3PromptsIn,
+  allRound3AnswersIn,
+  tallyRound3,
 } from '../lib/game'
 
 const toArray = (x) => (!x ? [] : Array.isArray(x) ? x : Object.values(x))
@@ -50,7 +63,7 @@ export default function useHostLoop({ room, code, isHost }) {
     async function tick() {
       const r = roomRef.current
       if (!r?.meta) return
-      const { status, round = 1, voteIndex = 0, phaseEndsAt } = r.meta
+      const { status, round = 1, voteIndex = 0, judgeIndex = 0, phaseEndsAt } = r.meta
 
       if (pendingRef.current) {
         if (status === pendingRef.current) pendingRef.current = null
@@ -67,8 +80,59 @@ export default function useHostLoop({ room, code, isHost }) {
 
       try {
         if (status === 'round-intro' && expired) {
-          pendingRef.current = 'answering'
-          await startAnswering(code, ANSWER_MS)
+          // Round 3 = Author's Cut: player-written prompts instead of matchups.
+          if (round === TOTAL_ROUNDS) {
+            pendingRef.current = 'round3-prompts'
+            await startRound3Prompts(code, R3_PROMPT_MS)
+          } else {
+            pendingRef.current = 'answering'
+            await startAnswering(code, ANSWER_MS)
+          }
+        } else if (status === 'round3-prompts') {
+          const prompts = r.round3?.prompts || {}
+          if (allRound3PromptsIn(prompts, uids) || expired) {
+            pendingRef.current = 'round3-answering'
+            await startRound3Answering(code, R3_ANSWER_MS)
+          }
+        } else if (status === 'round3-answering') {
+          const items = toArray(r.round3?.items)
+          if (items.length && (allRound3AnswersIn(items) || expired)) {
+            pendingRef.current = 'round3-judging'
+            await startRound3Judging(code, 0, R3_JUDGE_MS)
+          }
+        } else if (status === 'round3-judging') {
+          // Sequential: every player reads the same prompt together while its
+          // author picks the winner. Advance when this single item is chosen
+          // (or autopick it if its timer ran out).
+          const items = toArray(r.round3?.items)
+          const it = items[judgeIndex]
+          if (it && (it.chosen != null || expired)) {
+            if (expired && it.chosen == null) {
+              await autopickRound3(code, items, judgeIndex)
+            }
+            pendingRef.current = 'round3-results'
+            await showRound3Reveal(code, judgeIndex, R3_REVEAL_MS)
+          }
+        } else if (status === 'round3-results' && expired) {
+          const items = toArray(r.round3?.items)
+          if (judgeIndex + 1 < items.length) {
+            pendingRef.current = 'round3-judging'
+            await startRound3Judging(code, judgeIndex + 1, R3_JUDGE_MS)
+          } else {
+            const gained = tallyRound3(items)
+            const scores = {}
+            players.forEach((p) => {
+              scores[p.uid] = Math.max(0, p.score + (gained[p.uid] || 0))
+            })
+            const tied = findTopTie(scores)
+            if (tied.length === 2 && uids.length > 2) {
+              pendingRef.current = 'tiebreaker-scores'
+              await startTiebreaker(code, scores, tied)
+            } else {
+              pendingRef.current = 'scoreboard'
+              await applyScores(code, scores)
+            }
+          }
         } else if (status === 'tiebreaker-scores' && expired) {
           pendingRef.current = 'tiebreaker-versus'
           await showTiebreakerVersus(code, TIEBREAKER_VS_MS)
@@ -92,9 +156,15 @@ export default function useHostLoop({ room, code, isHost }) {
             await startVoting(code, voteIndex + 1, VOTE_MS)
           } else {
             const gained = tallyRound(matchups, round)
+            // Experimental: even-money bets + risk-bet interventions. Returns {}
+            // when no wagers were placed, so this is a no-op with features off.
+            // Deltas can be negative; clamp scores at 0 so a lost wager can't
+            // push anyone below zero.
+            const wagers = settleWagers(matchups)
             const scores = {}
             players.forEach((p) => {
-              scores[p.uid] = p.score + (gained[p.uid] || 0)
+              const delta = (gained[p.uid] || 0) + (wagers[p.uid] || 0)
+              scores[p.uid] = Math.max(0, p.score + delta)
             })
             // Final-round 2-way tie at the top? Run a roast tie-breaker — but
             // only if there's at least one non-tied player around to vote on

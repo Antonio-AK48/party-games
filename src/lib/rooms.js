@@ -12,8 +12,10 @@ import { db, ensureAuth } from './firebase'
 import {
   buildMatchups,
   buildPromptOrder,
+  buildRound3Items,
   ROUND_INTRO_MS,
   TIEBREAKER_SCORES_MS,
+  TOTAL_ROUNDS,
 } from './game'
 
 // ---- Room data model (Realtime Database) -----------------------------------
@@ -149,7 +151,22 @@ async function playersOrdered(code) {
 // Build a round's matchups and open the round-intro splash. The host loop then
 // auto-advances to 'answering' once the splash duration elapses. Matchups are
 // written here (not later) so all clients can pre-load them during the splash.
+//
+// Round TOTAL_ROUNDS uses the Author's Cut format instead (player-written
+// prompts) — no matchups, no promptOrder draw; the host loop branches into the
+// round3-* phases when the intro expires.
 async function beginRound(code, round) {
+  if (round === TOTAL_ROUNDS) {
+    await update(ref(db), {
+      [`rooms/${code}/meta/status`]: 'round-intro',
+      [`rooms/${code}/meta/round`]: round,
+      [`rooms/${code}/meta/voteIndex`]: 0,
+      [`rooms/${code}/meta/judgeIndex`]: 0,
+      [`rooms/${code}/meta/phaseEndsAt`]: Date.now() + ROUND_INTRO_MS,
+      [`rooms/${code}/round3`]: null, // wipe any stragglers from a prior game
+    })
+    return
+  }
   const [players, orderSnap] = await Promise.all([
     playersOrdered(code),
     get(ref(db, `rooms/${code}/meta/promptOrder`)),
@@ -182,6 +199,29 @@ export async function startGame(code) {
 
 export function beginNextRound(code, round) {
   return beginRound(code, round)
+}
+
+// Reset the room back to the lobby with the same players (names + avatars
+// preserved) and scores cleared, ready for a new game with the existing group.
+// Wipes rounds, tiebreaker, and the prompt shuffle so the next start draws fresh.
+export async function playAgain(code) {
+  const snap = await get(ref(db, `rooms/${code}/players`))
+  const players = snap.val() || {}
+  const updates = {
+    [`rooms/${code}/meta/status`]: 'lobby',
+    [`rooms/${code}/meta/round`]: 0,
+    [`rooms/${code}/meta/voteIndex`]: null,
+    [`rooms/${code}/meta/judgeIndex`]: null,
+    [`rooms/${code}/meta/phaseEndsAt`]: null,
+    [`rooms/${code}/meta/promptOrder`]: null,
+    [`rooms/${code}/rounds`]: null,
+    [`rooms/${code}/round3`]: null,
+    [`rooms/${code}/tiebreaker`]: null,
+  }
+  Object.keys(players).forEach((uid) => {
+    updates[`rooms/${code}/players/${uid}/score`] = 0
+  })
+  await update(ref(db), updates)
 }
 
 // ---- Phase transitions (host) ----------------------------------------------
@@ -283,4 +323,104 @@ export async function submitVote(code, round, matchupId, voterUid, authorUid) {
     ref(db, `rooms/${code}/rounds/${round}/matchups/${matchupId}/votes/${voterUid}`),
     authorUid
   )
+}
+
+// ---- Experimental wagers (betting + intervention) --------------------------
+
+// Back your own answer with an even-money bet, written alongside the answer and
+// hidden (UI-side) until results. Stored under the matchup so it travels with it.
+export async function placeBet(code, round, matchupId, uid, stake) {
+  await set(
+    ref(db, `rooms/${code}/rounds/${round}/matchups/${matchupId}/bets/${uid}`),
+    stake
+  )
+}
+
+// Step into a flopped matchup with a third answer + stake. There's exactly one
+// slot per matchup, so this runs as a transaction: the first writer wins and any
+// simultaneous challenger is rejected.
+export async function intervene(code, round, matchupId, uid, text, stake) {
+  const ivRef = ref(
+    db,
+    `rooms/${code}/rounds/${round}/matchups/${matchupId}/intervention`
+  )
+  const res = await runTransaction(ivRef, (cur) => {
+    if (cur) return undefined // slot already taken — abort
+    return { uid, answer: text, stake }
+  })
+  if (!res.committed) {
+    throw new Error('Someone already stepped in on this one')
+  }
+}
+
+// ---- Round 3: "Author's Cut" -----------------------------------------------
+
+export async function startRound3Prompts(code, durationMs) {
+  await update(ref(db, `rooms/${code}/meta`), {
+    status: 'round3-prompts',
+    phaseEndsAt: Date.now() + durationMs,
+  })
+}
+
+// All players submitted their prompt — compute the assignment and open the
+// answering phase. The items list is written here so all clients see the same
+// shuffled order.
+export async function startRound3Answering(code, durationMs) {
+  const snap = await get(ref(db, `rooms/${code}/round3/prompts`))
+  const items = buildRound3Items(snap.val() || {})
+  await update(ref(db), {
+    [`rooms/${code}/round3/items`]: items,
+    [`rooms/${code}/meta/status`]: 'round3-answering',
+    [`rooms/${code}/meta/phaseEndsAt`]: Date.now() + durationMs,
+  })
+}
+
+// Open (or advance) the judging phase for one specific prompt. Round 3 runs
+// sequentially: judging[i] → results[i] → judging[i+1] → … so every player
+// reads the same prompt together while the author picks live.
+export async function startRound3Judging(code, judgeIndex, durationMs) {
+  await update(ref(db, `rooms/${code}/meta`), {
+    status: 'round3-judging',
+    judgeIndex,
+    phaseEndsAt: Date.now() + durationMs,
+  })
+}
+
+// Begin (or advance) the sequential reveal — each prompt's results in turn.
+export async function showRound3Reveal(code, judgeIndex, durationMs) {
+  await update(ref(db, `rooms/${code}/meta`), {
+    status: 'round3-results',
+    judgeIndex,
+    phaseEndsAt: Date.now() + durationMs,
+  })
+}
+
+export async function submitRound3Prompt(code, uid, text) {
+  await set(ref(db, `rooms/${code}/round3/prompts/${uid}/text`), text)
+}
+
+export async function submitRound3Answer(code, itemIndex, uid, text) {
+  await set(
+    ref(db, `rooms/${code}/round3/items/${itemIndex}/answers/${uid}`),
+    text
+  )
+}
+
+export async function submitRound3Choice(code, itemIndex, chosenUid) {
+  await set(
+    ref(db, `rooms/${code}/round3/items/${itemIndex}/chosen`),
+    chosenUid
+  )
+}
+
+// Pick a random answerer for a single item — fires when its author runs out
+// the per-prompt judging timer, so the answerers aren't punished for a flaky
+// judge.
+export async function autopickRound3(code, items, index) {
+  const it = items?.[index]
+  if (!it || it.chosen != null) return
+  const answerers = Object.keys(it.answers || {})
+  if (answerers.length === 0) return
+  const pick = answerers[Math.floor(Math.random() * answerers.length)]
+  await set(ref(db, `rooms/${code}/round3/items/${index}/chosen`), pick)
 }

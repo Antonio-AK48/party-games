@@ -16,10 +16,30 @@ import {
   claimAvatar,
 } from './lib/rooms'
 import { saveSession, loadSession, clearSession } from './lib/session'
+import { isMuted, toggleMuted } from './lib/sound'
+
+// Small floating speaker button — toggles sound app-wide, persists to localStorage.
+function MuteToggle() {
+  const [muted, setMuted] = useState(isMuted())
+  return (
+    <button
+      type="button"
+      onClick={() => setMuted(toggleMuted())}
+      aria-label={muted ? 'Unmute sounds' : 'Mute sounds'}
+      title={muted ? 'Sounds off' : 'Sounds on'}
+      className="fixed top-3 right-3 z-50 rounded-full border border-slate-800 bg-slate-900/90 px-3 py-2 text-sm text-slate-300 backdrop-blur transition hover:bg-slate-800"
+    >
+      {muted ? '🔇' : '🔊'}
+    </button>
+  )
+}
 
 function Shell({ children }) {
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100">{children}</main>
+    <main className="min-h-screen bg-slate-950 text-slate-100">
+      <MuteToggle />
+      {children}
+    </main>
   )
 }
 
