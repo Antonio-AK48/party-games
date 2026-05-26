@@ -18,10 +18,18 @@ function WagerBadge({ children, result }) {
   )
 }
 
-// One answer card. Extracted so each row gets its own useCountUp instance for
-// the vote tally — keeps the hook count stable in RoundResults itself.
+// One answer card. Extracted so each row gets its own useCountUp instances —
+// every number we render (votes, base points, sweep bonus, bet stake,
+// intervention stake) climbs from 0 over ~1.2-1.5s for the reveal beat.
 function AnswerRow({ answer: a, isWinner, totalVotes, showPoints }) {
   const votes = useCountUp(a.votes, 900)
+  // Always call these so the hook count is stable even when a card has no bet /
+  // intervention / sweep — the helper renders 0 immediately for non-positive
+  // targets, so unused calls are cheap and inert.
+  const points = useCountUp(a.points || 0, 1500)
+  const bonus = useCountUp(a.bonus || 0, 1200)
+  const betStake = useCountUp(a.bet?.stake || 0, 1500)
+  const ivStake = useCountUp(a.intervention?.stake || 0, 1500)
   // Bar tracks the animated vote count so it grows in sync with the number.
   const pct = totalVotes ? Math.round((votes / totalVotes) * 100) : 0
   return (
@@ -41,22 +49,24 @@ function AnswerRow({ answer: a, isWinner, totalVotes, showPoints }) {
       <div className="relative flex items-center justify-between gap-4">
         <div className="min-w-0 flex-1">
           <p className="text-lg font-medium mb-1 break-words">{a.text}</p>
-          <p className="text-sm text-slate-400 mb-2">
-            by {a.author}
-            {showPoints && !a.intervention && ` · +${a.points} pts`}
-          </p>
+          <p className="text-sm text-slate-400 mb-2">by {a.author}</p>
+          {showPoints && !a.intervention && a.points > 0 && (
+            <p className="mb-2 mr-2 inline-flex items-center gap-1.5 rounded-full border border-emerald-400/40 bg-emerald-400/10 px-3 py-1 text-sm font-bold tabular-nums tracking-wide text-emerald-300">
+              +{points} pts
+            </p>
+          )}
           {showPoints && a.sweep && (
-            <p className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-amber-400/40 bg-amber-400/10 px-3 py-1 text-xs font-bold uppercase tracking-wide text-amber-300">
-              🧹 Sweep! +{a.bonus} bonus
+            <p className="mb-2 mr-2 inline-flex items-center gap-1.5 rounded-full border border-amber-400/40 bg-amber-400/10 px-3 py-1 text-xs font-bold uppercase tracking-wide text-amber-300">
+              🧹 Sweep! +{bonus} bonus
             </p>
           )}
           {showPoints && a.bet && (
             <WagerBadge result={a.bet.result}>
               🎲 Bet{' '}
               {a.bet.result === 'win'
-                ? `won +${a.bet.stake}`
+                ? `won +${betStake}`
                 : a.bet.result === 'lose'
-                ? `lost -${a.bet.stake}`
+                ? `lost -${betStake}`
                 : 'pushed'}
             </WagerBadge>
           )}
@@ -64,9 +74,9 @@ function AnswerRow({ answer: a, isWinner, totalVotes, showPoints }) {
             <WagerBadge result={a.intervention.result}>
               ⚡ Intervention{' '}
               {a.intervention.result === 'win'
-                ? `won +${a.intervention.stake}`
+                ? `won +${ivStake}`
                 : a.intervention.result === 'lose'
-                ? `flopped -${a.intervention.stake}`
+                ? `flopped -${ivStake}`
                 : 'survived'}
             </WagerBadge>
           )}
