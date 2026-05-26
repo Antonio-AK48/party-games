@@ -30,7 +30,7 @@ import {
   TIEBREAKER_VOTE_HEADER,
   scoreMatchup,
   multiplierLabel,
-  betStake,
+  BET_STAKE,
   interventionStake,
   BET_FROM_ROUND,
   INTERVENTION_MIN_PLAYERS,
@@ -265,13 +265,19 @@ function Game({ room, code, uid, isHost, onLeave }) {
     }
 
     const { m, i } = pending[0]
-    // Betting opens in round 2 (round 1 starts at 0) and only if you can cover
-    // twice the stake — keeping any single bet to ~half your score. Hidden until
-    // results; locked together with the answer.
+    // Betting opens in round 2 (round 1 starts at 0). Hidden until results;
+    // locked together with the answer. Players choose their wager in BET_STAKE
+    // increments (default 100). Budget = score minus what they've already
+    // staked on this round's other matchups, so total wagered never exceeds
+    // their actual pool.
     const myScore = playersMap[uid]?.score || 0
-    const stake = betStake(round)
+    const myExposure = matchups.reduce(
+      (sum, mm) => sum + (mm.bets?.[uid] || 0),
+      0
+    )
+    const budget = Math.max(0, myScore - myExposure)
     const canBet =
-      FEATURES.betting && round >= BET_FROM_ROUND && myScore >= 2 * stake
+      FEATURES.betting && round >= BET_FROM_ROUND && budget >= BET_STAKE
     return (
       <RoundBadge round={round}>
         <Prompt
@@ -281,10 +287,10 @@ function Game({ room, code, uid, isHost, onLeave }) {
           totalSteps={mine.length}
           secondsLeft={secondsLeft}
           total={ANSWER_MS / 1000}
-          betConfig={canBet ? { stake } : null}
-          onSubmit={(text, bet) => {
+          betConfig={canBet ? { step: BET_STAKE, max: budget } : null}
+          onSubmit={(text, betAmount) => {
             submitAnswer(code, round, i, uid, text)
-            if (bet) placeBet(code, round, i, uid, stake)
+            if (betAmount > 0) placeBet(code, round, i, uid, betAmount)
           }}
         />
       </RoundBadge>

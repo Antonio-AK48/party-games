@@ -18,16 +18,19 @@ export const SWEEP_MIN_VOTERS = 2
 // ---- Experimental wagers: betting + intervention (see lib/features.js) -------
 // Both are under playtest and may be removed. Values are intentionally simple to
 // reason about during a live game — tune freely. See settleMatchupWagers below.
-//   Betting:      round 1 starts everyone at 0, so betting opens in round 2. A
-//                 bet is even-money and you can only place it if you can cover
-//                 twice the stake (keeps any single bet ≤ ~half your score).
+//   Betting:      round 1 starts everyone at 0, so betting opens in round 2.
+//                 Even money — win +stake, lose −stake. Flat stake (one vote's
+//                 worth, not round-scaled) so a player who authors multiple
+//                 matchups can wager on each separately. The Game UI tracks
+//                 outstanding bet exposure so the total wagered in a round can
+//                 never exceed the player's actual pool.
 //   Intervention: a voter becomes a third author, so it needs a crowd (≥6) and
 //                 the current top 2 are barred (anti-snowball + anti-spite).
 export const BET_FROM_ROUND = 2
 export const INTERVENTION_MIN_PLAYERS = 6
 export const INTERVENTION_EXCLUDE_TOP = 2
 // Even-money self-bet: win +stake / lose −stake, settled vs. your co-author only.
-export const betStake = (round) => POINTS_PER_VOTE * round
+export const BET_STAKE = POINTS_PER_VOTE
 // Risk-bet intervention: win +stake (strictly most votes) / lose −stake (dead last).
 export const interventionStake = (round) => POINTS_PER_VOTE * round * 2
 

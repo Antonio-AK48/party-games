@@ -9,10 +9,11 @@ function TimerBar({ secondsLeft, total }) {
   // time secondsLeft drops within the 5-second urgency window.
   const prev = useRef(secondsLeft)
   useEffect(() => {
+    // Tick only in the very last beats — 5+ seconds of ticking gets old fast.
     if (
       secondsLeft != null &&
       secondsLeft > 0 &&
-      secondsLeft <= 5 &&
+      secondsLeft <= 3 &&
       secondsLeft < prev.current
     ) {
       sounds.tick()

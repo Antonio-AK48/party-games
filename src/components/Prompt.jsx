@@ -9,27 +9,31 @@ function Prompt({
   secondsLeft,
   total,
   onSubmit,
-  betConfig, // { stake } when betting is offered this matchup, else null/undefined
+  // betConfig: { step, max } when betting is offered this matchup, else null.
+  // The player picks an amount in `step` increments from 0 up to max (their
+  // remaining round budget); 0 means "no bet."
+  betConfig,
   maxLength = 100,
   placeholder = 'Type your funniest answer…',
   submitLabel = 'Submit Answer',
 }) {
   const [answer, setAnswer] = useState('')
-  const [bet, setBet] = useState(false)
+  const [betAmount, setBetAmount] = useState(0)
   const [submitted, setSubmitted] = useState(false)
   const submittedRef = useRef(false)
-  const betRef = useRef(false) // mirrors `bet` so the time-out submit sees it too
+  // Mirrors `betAmount` so the time-out auto-submit reads the current value.
+  const betAmountRef = useRef(0)
 
-  const setBetSynced = (v) => {
-    betRef.current = v
-    setBet(v)
+  const setBetAmountSynced = (v) => {
+    betAmountRef.current = v
+    setBetAmount(v)
   }
 
   const doSubmit = (text) => {
     if (submittedRef.current) return
     submittedRef.current = true
     setSubmitted(true)
-    onSubmit?.(text, betRef.current)
+    onSubmit?.(text, betAmountRef.current)
     sounds.submit()
   }
 
@@ -74,38 +78,60 @@ function Prompt({
               <span>Press submit when ready</span>
             </div>
             {betConfig && (
-              <button
-                type="button"
-                onClick={() => setBetSynced(!bet)}
-                aria-pressed={bet}
-                className={`w-full rounded-lg border px-4 py-3 text-left transition ${
-                  bet
+              <div
+                className={`rounded-lg border px-4 py-3 transition ${
+                  betAmount > 0
                     ? 'border-amber-400 bg-amber-400/10'
-                    : 'border-slate-800 bg-slate-900 hover:border-slate-700'
+                    : 'border-slate-800 bg-slate-900'
                 }`}
               >
-                <span className="flex items-center justify-between font-semibold">
-                  <span>🎲 Bet {betConfig.stake} on this answer</span>
-                  <span
-                    className={`text-xs uppercase tracking-wide ${
-                      bet ? 'text-amber-300' : 'text-slate-500'
-                    }`}
-                  >
-                    {bet ? 'Wager on' : 'Tap to wager'}
-                  </span>
-                </span>
-                <span className="mt-1 block text-xs text-slate-500">
-                  Even money — beat your matchup and win +{betConfig.stake}, lose
-                  it and drop −{betConfig.stake}.
-                </span>
-              </button>
+                <div className="flex items-center justify-between font-semibold">
+                  <span>🎲 Bet on this answer</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setBetAmountSynced(
+                          Math.max(0, betAmount - betConfig.step)
+                        )
+                      }
+                      disabled={betAmount === 0}
+                      aria-label="Decrease bet"
+                      className="w-9 h-9 rounded-md border border-slate-700 bg-slate-900 text-lg font-bold transition hover:border-slate-600 hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed"
+                    >
+                      −
+                    </button>
+                    <span className="w-20 text-center tabular-nums font-bold">
+                      {betAmount} pts
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setBetAmountSynced(
+                          Math.min(betConfig.max, betAmount + betConfig.step)
+                        )
+                      }
+                      disabled={betAmount >= betConfig.max}
+                      aria-label="Increase bet"
+                      className="w-9 h-9 rounded-md border border-slate-700 bg-slate-900 text-lg font-bold transition hover:border-slate-600 hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+                <p className="mt-1 text-xs text-slate-500">
+                  {betAmount > 0
+                    ? `Even money — win +${betAmount}, lose −${betAmount}.`
+                    : `Tap + to wager (${betConfig.step}-pt steps, up to ${betConfig.max}).`}
+                </p>
+              </div>
             )}
             <button
               type="submit"
               disabled={!answer.trim()}
               className="w-full rounded-lg bg-purple-600 hover:bg-purple-500 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed py-3 font-semibold transition"
             >
-              {bet ? `Submit & Bet ${betConfig.stake}` : submitLabel}
+              {betAmount > 0 ? `Submit & Bet ${betAmount}` : submitLabel}
             </button>
           </form>
         ) : (
@@ -115,9 +141,9 @@ function Prompt({
                 Your answer
               </p>
               <p className="text-xl font-medium break-words">{answer || '(no answer)'}</p>
-              {bet && betConfig && (
+              {betAmount > 0 && (
                 <p className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-amber-400/40 bg-amber-400/10 px-3 py-1 text-xs font-bold uppercase tracking-wide text-amber-300">
-                  🎲 Bet {betConfig.stake} placed
+                  🎲 Bet {betAmount} placed
                 </p>
               )}
             </div>

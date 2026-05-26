@@ -103,36 +103,39 @@ function noise({ dur = 0.4, gain = 0.04, start = 0 }) {
 // ---- Cues ------------------------------------------------------------------
 // Sparingly used: only the moments the game wants to punctuate.
 
+// Gain values intentionally kept low — these fire often during a game and they
+// land as accents, not as foreground audio. Tune higher if you can't hear them.
 export const sounds = {
   // A locked-in two-note chime when an answer is submitted.
   submit() {
-    tone({ freq: 783.99, dur: 0.14, type: 'triangle', gain: 0.18 })
-    tone({ freq: 1046.5, dur: 0.22, type: 'triangle', gain: 0.18, start: 0.09 })
+    tone({ freq: 783.99, dur: 0.12, type: 'triangle', gain: 0.07 })
+    tone({ freq: 1046.5, dur: 0.18, type: 'triangle', gain: 0.07, start: 0.09 })
   },
-  // Crisp tap when a vote is cast.
+  // Subtle tap when a vote is cast.
   vote() {
-    tone({ freq: 1200, dur: 0.05, type: 'square', gain: 0.08 })
+    tone({ freq: 1200, dur: 0.04, type: 'square', gain: 0.04 })
   },
   // Dramatic swoop when someone steps in with an intervention.
   intervention() {
-    sweep({ from: 220, to: 1500, dur: 0.32, type: 'sawtooth', gain: 0.16 })
-    tone({ freq: 1500, dur: 0.18, type: 'triangle', gain: 0.18, start: 0.3 })
+    sweep({ from: 220, to: 1500, dur: 0.3, type: 'sawtooth', gain: 0.09 })
+    tone({ freq: 1500, dur: 0.16, type: 'triangle', gain: 0.09, start: 0.28 })
   },
   // Drumroll into a ding when a matchup's results land.
   reveal() {
-    noise({ dur: 0.45, gain: 0.05 })
-    tone({ freq: 880, dur: 0.28, type: 'triangle', gain: 0.22, start: 0.42 })
+    noise({ dur: 0.4, gain: 0.025 })
+    tone({ freq: 880, dur: 0.24, type: 'triangle', gain: 0.1, start: 0.4 })
   },
-  // Ascending arpeggio for the final-round winner.
+  // Ascending arpeggio for the final-round winner (the one cue allowed to be
+  // a little louder — it only ever plays once per game).
   winner() {
     const notes = [523.25, 659.25, 783.99, 1046.5] // C5 E5 G5 C6
     notes.forEach((f, i) =>
-      tone({ freq: f, dur: 0.28, type: 'triangle', gain: 0.22, start: i * 0.12 })
+      tone({ freq: f, dur: 0.26, type: 'triangle', gain: 0.16, start: i * 0.12 })
     )
   },
   // Soft clock-tick for the last few seconds of any timer.
   tick() {
-    tone({ freq: 660, dur: 0.04, type: 'square', gain: 0.05 })
+    tone({ freq: 660, dur: 0.03, type: 'square', gain: 0.025 })
   },
 }
 
