@@ -69,10 +69,18 @@ function Waiting({ title, subtitle }) {
 }
 
 function RoundBadge({ round, children }) {
+  // Round 3 uses the Author's Cut format — give it its own identity throughout
+  // so the table knows the rules have changed (rather than seeing "Round 3 / 3"
+  // and expecting the same matchup flow as rounds 1–2).
+  const isAuthorsCut = round === TOTAL_ROUNDS
   return (
     <div className="relative">
-      <div className="absolute top-4 left-4 text-xs text-slate-500 uppercase tracking-wider z-10">
-        Round {round} / {TOTAL_ROUNDS}
+      <div
+        className={`absolute top-4 left-4 text-xs uppercase tracking-wider z-10 ${
+          isAuthorsCut ? 'text-purple-400 font-semibold' : 'text-slate-500'
+        }`}
+      >
+        {isAuthorsCut ? "✍ Author's Cut" : `Round ${round} / ${TOTAL_ROUNDS}`}
       </div>
       {children}
     </div>
@@ -240,11 +248,17 @@ function Game({ room, code, uid, isHost, onLeave }) {
     const pending = mine.filter(({ m }) => !(m.answers && m.answers[uid] != null))
 
     if (mine.length === 0 || pending.length === 0) {
+      const allUids = Object.keys(playersMap)
+      const done = allUids.filter((p) =>
+        matchups
+          .filter((m) => authorsOf(m).includes(p))
+          .every((m) => m.answers && m.answers[p] != null)
+      ).length
       return (
         <RoundBadge round={round}>
           <Waiting
             title="All locked in"
-            subtitle="Waiting for everyone to finish answering…"
+            subtitle={`Waiting for everyone to finish answering… (${done}/${allUids.length})`}
           />
         </RoundBadge>
       )
@@ -399,13 +413,16 @@ function Game({ room, code, uid, isHost, onLeave }) {
 
   // ---- Round 3 (Author's Cut): write your prompt -------------------------
   if (status === 'round3-prompts') {
-    const submitted = room.round3?.prompts?.[uid]?.text != null
+    const promptsMap = room.round3?.prompts || {}
+    const submitted = promptsMap[uid]?.text != null
     if (submitted) {
+      const allUids = Object.keys(playersMap)
+      const done = allUids.filter((p) => promptsMap[p]?.text != null).length
       return (
         <RoundBadge round={round}>
           <Waiting
             title="Prompt locked in"
-            subtitle="Waiting for everyone else to write theirs…"
+            subtitle={`Waiting for everyone else to write theirs… (${done}/${allUids.length})`}
           />
         </RoundBadge>
       )
@@ -438,11 +455,17 @@ function Game({ room, code, uid, isHost, onLeave }) {
       ({ it }) => !(it.answers && it.answers[uid] != null)
     )
     if (assigned.length === 0 || pending.length === 0) {
+      const allUids = Object.keys(playersMap)
+      const done = allUids.filter((p) =>
+        items
+          .filter((it) => toArray(it.assigned).includes(p))
+          .every((it) => it.answers && it.answers[p] != null)
+      ).length
       return (
         <RoundBadge round={round}>
           <Waiting
             title="All locked in"
-            subtitle="Waiting for everyone to finish answering…"
+            subtitle={`Waiting for everyone to finish answering… (${done}/${allUids.length})`}
           />
         </RoundBadge>
       )

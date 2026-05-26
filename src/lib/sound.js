@@ -130,6 +130,10 @@ export const sounds = {
       tone({ freq: f, dur: 0.28, type: 'triangle', gain: 0.22, start: i * 0.12 })
     )
   },
+  // Soft clock-tick for the last few seconds of any timer.
+  tick() {
+    tone({ freq: 660, dur: 0.04, type: 'square', gain: 0.05 })
+  },
 }
 
 // ---- Mute control ----------------------------------------------------------

@@ -1,4 +1,5 @@
 import Avatar from './Avatar'
+import useCountUp from '../hooks/useCountUp'
 
 // Coloured pill for a revealed wager outcome (bet or intervention).
 function WagerBadge({ children, result }) {
@@ -14,6 +15,82 @@ function WagerBadge({ children, result }) {
     >
       {children}
     </p>
+  )
+}
+
+// One answer card. Extracted so each row gets its own useCountUp instance for
+// the vote tally — keeps the hook count stable in RoundResults itself.
+function AnswerRow({ answer: a, isWinner, totalVotes, showPoints }) {
+  const votes = useCountUp(a.votes, 900)
+  // Bar tracks the animated vote count so it grows in sync with the number.
+  const pct = totalVotes ? Math.round((votes / totalVotes) * 100) : 0
+  return (
+    <div
+      className={`relative overflow-hidden rounded-2xl border p-6 ${
+        isWinner
+          ? 'border-purple-500 bg-purple-950/40'
+          : 'border-slate-800 bg-slate-900'
+      }`}
+    >
+      <div
+        className={`absolute inset-y-0 left-0 ${
+          isWinner ? 'bg-purple-600/20' : 'bg-slate-700/20'
+        }`}
+        style={{ width: `${pct}%` }}
+      />
+      <div className="relative flex items-center justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <p className="text-lg font-medium mb-1 break-words">{a.text}</p>
+          <p className="text-sm text-slate-400 mb-2">
+            by {a.author}
+            {showPoints && !a.intervention && ` · +${a.points} pts`}
+          </p>
+          {showPoints && a.sweep && (
+            <p className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-amber-400/40 bg-amber-400/10 px-3 py-1 text-xs font-bold uppercase tracking-wide text-amber-300">
+              🧹 Sweep! +{a.bonus} bonus
+            </p>
+          )}
+          {showPoints && a.bet && (
+            <WagerBadge result={a.bet.result}>
+              🎲 Bet{' '}
+              {a.bet.result === 'win'
+                ? `won +${a.bet.stake}`
+                : a.bet.result === 'lose'
+                ? `lost -${a.bet.stake}`
+                : 'pushed'}
+            </WagerBadge>
+          )}
+          {showPoints && a.intervention && (
+            <WagerBadge result={a.intervention.result}>
+              ⚡ Intervention{' '}
+              {a.intervention.result === 'win'
+                ? `won +${a.intervention.stake}`
+                : a.intervention.result === 'lose'
+                ? `flopped -${a.intervention.stake}`
+                : 'survived'}
+            </WagerBadge>
+          )}
+          {a.voters.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {a.voters.map((v, vi) => (
+                <Avatar
+                  key={vi}
+                  name={v.name}
+                  avatar={v.avatar}
+                  className="w-7 h-7 text-xs"
+                />
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="text-right shrink-0">
+          <p className="text-2xl font-bold tabular-nums">{votes}</p>
+          <p className="text-xs text-slate-500">
+            {a.votes === 1 ? 'vote' : 'votes'}
+          </p>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -36,79 +113,15 @@ function RoundResults({ prompt, answers, step, totalSteps, showPoints = true }) 
         </h2>
 
         <div className="space-y-4">
-          {answers.map((a, i) => {
-            const pct = Math.round((a.votes / totalVotes) * 100)
-            const isWinner = a === winner && a.votes > 0
-            return (
-              <div
-                key={i}
-                className={`relative overflow-hidden rounded-2xl border p-6 ${
-                  isWinner
-                    ? 'border-purple-500 bg-purple-950/40'
-                    : 'border-slate-800 bg-slate-900'
-                }`}
-              >
-                <div
-                  className={`absolute inset-y-0 left-0 ${
-                    isWinner ? 'bg-purple-600/20' : 'bg-slate-700/20'
-                  }`}
-                  style={{ width: `${pct}%` }}
-                />
-                <div className="relative flex items-center justify-between gap-4">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-lg font-medium mb-1 break-words">{a.text}</p>
-                    <p className="text-sm text-slate-400 mb-2">
-                      by {a.author}
-                      {showPoints && !a.intervention && ` · +${a.points} pts`}
-                    </p>
-                    {showPoints && a.sweep && (
-                      <p className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-amber-400/40 bg-amber-400/10 px-3 py-1 text-xs font-bold uppercase tracking-wide text-amber-300">
-                        🧹 Sweep! +{a.bonus} bonus
-                      </p>
-                    )}
-                    {showPoints && a.bet && (
-                      <WagerBadge result={a.bet.result}>
-                        🎲 Bet{' '}
-                        {a.bet.result === 'win'
-                          ? `won +${a.bet.stake}`
-                          : a.bet.result === 'lose'
-                          ? `lost -${a.bet.stake}`
-                          : 'pushed'}
-                      </WagerBadge>
-                    )}
-                    {showPoints && a.intervention && (
-                      <WagerBadge result={a.intervention.result}>
-                        ⚡ Intervention{' '}
-                        {a.intervention.result === 'win'
-                          ? `won +${a.intervention.stake}`
-                          : a.intervention.result === 'lose'
-                          ? `flopped -${a.intervention.stake}`
-                          : 'survived'}
-                      </WagerBadge>
-                    )}
-                    {a.voters.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5">
-                        {a.voters.map((v, vi) => (
-                          <Avatar
-                            key={vi}
-                            name={v.name}
-                            avatar={v.avatar}
-                            className="w-7 h-7 text-xs"
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-2xl font-bold">{a.votes}</p>
-                    <p className="text-xs text-slate-500">
-                      {a.votes === 1 ? 'vote' : 'votes'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )
-          })}
+          {answers.map((a, i) => (
+            <AnswerRow
+              key={i}
+              answer={a}
+              isWinner={a === winner && a.votes > 0}
+              totalVotes={totalVotes}
+              showPoints={showPoints}
+            />
+          ))}
         </div>
 
         <p className="text-center text-slate-500 text-sm mt-8">

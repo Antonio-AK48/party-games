@@ -1,7 +1,34 @@
 import { useEffect } from 'react'
 import confetti from 'canvas-confetti'
 import Avatar from './Avatar'
+import useCountUp from '../hooks/useCountUp'
 import { sounds } from '../lib/sound'
+
+// One scoreboard row. Extracted so each row gets its own useCountUp instance,
+// keeping the hook count stable inside Scoreboard.
+function ScoreRow({ player, rank, top }) {
+  const score = useCountUp(player.score, 1500)
+  // Bar tracks the animated value so it fills in lockstep with the number.
+  const pct = Math.max(8, top > 0 ? Math.round((score / top) * 100) : 8)
+  return (
+    <li className="relative overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 p-5">
+      <div
+        className="absolute inset-y-0 left-0 bg-purple-600/15"
+        style={{ width: `${pct}%` }}
+      />
+      <div className="relative flex items-center gap-4">
+        <span className="text-2xl font-bold text-slate-500 w-8">{rank}</span>
+        <Avatar
+          name={player.name}
+          avatar={player.avatar}
+          className="w-10 h-10 text-base"
+        />
+        <span className="text-lg font-medium flex-1">{player.name}</span>
+        <span className="text-2xl font-bold tabular-nums">{score}</span>
+      </div>
+    </li>
+  )
+}
 
 function Scoreboard({ players, isFinal, isHost, onNext, onPlayAgain, onLeave }) {
   const sorted = [...players].sort((a, b) => b.score - a.score)
@@ -58,34 +85,9 @@ function Scoreboard({ players, isFinal, isHost, onNext, onPlayAgain, onLeave }) 
         )}
 
         <ol className="space-y-3">
-          {sorted.map((p, i) => {
-            const pct = Math.max(8, Math.round((p.score / top) * 100))
-            return (
-              <li
-                key={p.name}
-                className="relative overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 p-5"
-              >
-                <div
-                  className="absolute inset-y-0 left-0 bg-purple-600/15"
-                  style={{ width: `${pct}%` }}
-                />
-                <div className="relative flex items-center gap-4">
-                  <span className="text-2xl font-bold text-slate-500 w-8">
-                    {i + 1}
-                  </span>
-                  <Avatar
-                    name={p.name}
-                    avatar={p.avatar}
-                    className="w-10 h-10 text-base"
-                  />
-                  <span className="text-lg font-medium flex-1">{p.name}</span>
-                  <span className="text-2xl font-bold tabular-nums">
-                    {p.score}
-                  </span>
-                </div>
-              </li>
-            )
-          })}
+          {sorted.map((p, i) => (
+            <ScoreRow key={p.name} player={p} rank={i + 1} top={top} />
+          ))}
         </ol>
 
         <div className="flex flex-col sm:flex-row gap-3 mt-10">
