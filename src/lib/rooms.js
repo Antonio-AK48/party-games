@@ -217,6 +217,7 @@ export async function playAgain(code) {
     [`rooms/${code}/rounds`]: null,
     [`rooms/${code}/round3`]: null,
     [`rooms/${code}/tiebreaker`]: null,
+    [`rooms/${code}/finalStandings`]: null,
   }
   Object.keys(players).forEach((uid) => {
     updates[`rooms/${code}/players/${uid}/score`] = 0
@@ -298,7 +299,10 @@ export async function submitTiebreakerVote(code, voterUid, authorUid) {
   await set(ref(db, `rooms/${code}/tiebreaker/votes/${voterUid}`), authorUid)
 }
 
-export async function applyScores(code, scores) {
+// `finalStandings` (optional, only passed at game-end) is a frozen snapshot of
+// [{ uid, name, avatar, score }] used so the final scoreboard's displayed
+// winner doesn't shift if someone leaves the room afterwards.
+export async function applyScores(code, scores, finalStandings) {
   const updates = {
     [`rooms/${code}/meta/status`]: 'scoreboard',
     [`rooms/${code}/meta/phaseEndsAt`]: null,
@@ -306,6 +310,9 @@ export async function applyScores(code, scores) {
   Object.entries(scores).forEach(([uid, score]) => {
     updates[`rooms/${code}/players/${uid}/score`] = score
   })
+  if (finalStandings) {
+    updates[`rooms/${code}/finalStandings`] = finalStandings
+  }
   await update(ref(db), updates)
 }
 

@@ -685,12 +685,23 @@ function Game({ room, code, uid, isHost, onLeave }) {
 
   // ---- Scoreboard: standings between rounds, or final results --------------
   if (status === 'scoreboard') {
-    const players = Object.values(playersMap).map((p) => ({
-      name: p.name,
-      avatar: p.avatar || null,
-      score: p.score || 0,
-    }))
     const isFinal = round >= TOTAL_ROUNDS
+    // On the final scoreboard, prefer the frozen finalStandings snapshot so the
+    // winner doesn't change if they leave the room. Between-round scoreboards
+    // (and games from before this snapshot existed) fall back to live players.
+    const snapshot = isFinal ? toArray(room.finalStandings) : []
+    const players =
+      snapshot.length > 0
+        ? snapshot.map((p) => ({
+            name: p.name,
+            avatar: p.avatar || null,
+            score: p.score || 0,
+          }))
+        : Object.values(playersMap).map((p) => ({
+            name: p.name,
+            avatar: p.avatar || null,
+            score: p.score || 0,
+          }))
     return (
       <Scoreboard
         players={players}

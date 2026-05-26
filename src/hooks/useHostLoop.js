@@ -37,6 +37,20 @@ import {
 
 const toArray = (x) => (!x ? [] : Array.isArray(x) ? x : Object.values(x))
 
+// Snapshot of [{ uid, name, avatar, score }] sorted high → low, frozen into
+// RTDB at game-end so the scoreboard's displayed winner doesn't shift if the
+// actual winner leaves the room afterwards.
+function buildFinalStandings(r, scores) {
+  return Object.entries(r.players || {})
+    .map(([uid, p]) => ({
+      uid,
+      name: p.name || 'Someone',
+      avatar: p.avatar || null,
+      score: scores[uid] ?? p.score ?? 0,
+    }))
+    .sort((a, b) => b.score - a.score)
+}
+
 // The host is the single writer for phase transitions. Every ~700ms it inspects
 // the live room and advances the state machine when the current phase is done
 // (everyone acted) or its deadline has passed. Non-host clients never run this.
@@ -130,7 +144,7 @@ export default function useHostLoop({ room, code, isHost }) {
               await startTiebreaker(code, scores, tied)
             } else {
               pendingRef.current = 'scoreboard'
-              await applyScores(code, scores)
+              await applyScores(code, scores, buildFinalStandings(r, scores))
             }
           }
         } else if (status === 'tiebreaker-scores' && expired) {
@@ -177,7 +191,11 @@ export default function useHostLoop({ room, code, isHost }) {
               await startTiebreaker(code, scores, tied)
             } else {
               pendingRef.current = 'scoreboard'
-              await applyScores(code, scores)
+              await applyScores(
+                code,
+                scores,
+                isFinal ? buildFinalStandings(r, scores) : undefined
+              )
             }
           }
         } else if (status === 'tiebreaker-answering') {
@@ -222,7 +240,7 @@ export default function useHostLoop({ room, code, isHost }) {
           })
           finalScores[winner] = (finalScores[winner] || 0) + 1
           pendingRef.current = 'scoreboard'
-          await applyScores(code, finalScores)
+          await applyScores(code, finalScores, buildFinalStandings(r, finalScores))
         }
       } catch {
         // Write failed — drop the lock so the next tick retries.
