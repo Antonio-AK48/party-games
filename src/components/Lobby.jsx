@@ -3,11 +3,16 @@ import Avatar from './Avatar'
 import AvatarPicker from './AvatarPicker'
 import avatars from '../lib/avatars'
 
+const GAME_LABEL = { captions: 'Captions', cipher: 'Decode' }
+// Captions stays at 3 for solo-laptop testing; Decode genuinely needs 4 (2v2).
+const MIN_PLAYERS_BY_GAME = { captions: 3, cipher: 4 }
+
 function Lobby({
   code,
   myUid,
   players,
   isHost,
+  gameType = 'captions',
   onLeave,
   onStart,
   onPickAvatar,
@@ -18,8 +23,10 @@ function Lobby({
   const [claiming, setClaiming] = useState(false)
   const [pickError, setPickError] = useState('')
 
-  const minPlayers = 3
+  const gameLabel = GAME_LABEL[gameType] || 'Game'
+  const minPlayers = MIN_PLAYERS_BY_GAME[gameType] ?? 3
   const canStart = players.length >= minPlayers
+  const isCipher = gameType === 'cipher'
   const inviteLink = `${window.location.origin}/?room=${code}`
   const me = players.find((p) => p.uid === myUid)
 
@@ -122,6 +129,13 @@ function Lobby({
         )}
 
         <div className="text-center mb-10">
+          <p
+            className={`text-sm uppercase tracking-[0.3em] mb-2 font-semibold ${
+              isCipher ? 'text-sky-400' : 'text-purple-400'
+            }`}
+          >
+            {gameLabel}
+          </p>
           <p className="text-slate-400 text-sm uppercase tracking-wider mb-3">
             Room code
           </p>
@@ -164,6 +178,11 @@ function Lobby({
               </li>
             ))}
           </ul>
+          {isCipher && (
+            <p className="mt-4 text-xs text-slate-500">
+              Teams will be split evenly when the host starts.
+            </p>
+          )}
         </div>
 
         {isHost ? (

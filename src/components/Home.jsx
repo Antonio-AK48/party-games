@@ -1,3 +1,5 @@
+// onCreate receives the chosen gameType so the create flow knows which game
+// the host is spinning up.
 function Home({ onCreate, onJoin }) {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-6 py-12">
@@ -12,29 +14,42 @@ function Home({ onCreate, onJoin }) {
 
       <div className="grid sm:grid-cols-2 gap-4 w-full max-w-2xl">
         <button
-          onClick={onCreate}
-          className="rounded-2xl border border-slate-800 bg-slate-900 hover:bg-slate-800 hover:border-slate-700 transition p-8 text-left group"
+          onClick={() => onCreate('captions')}
+          className="rounded-2xl border border-slate-800 bg-slate-900 hover:bg-slate-800 hover:border-purple-500 transition p-8 text-left group"
         >
           <div className="text-2xl font-semibold mb-2 group-hover:text-purple-400 transition">
-            Create Room
+            Captions
           </div>
           <div className="text-slate-400">
-            Start a new game and invite friends with a room code
+            Write the funniest answer to each prompt, vote on the rest. 4+ players.
           </div>
         </button>
 
         <button
-          onClick={onJoin}
-          className="rounded-2xl border border-slate-800 bg-slate-900 hover:bg-slate-800 hover:border-slate-700 transition p-8 text-left group"
+          onClick={() => onCreate('cipher')}
+          className="rounded-2xl border border-slate-800 bg-slate-900 hover:bg-slate-800 hover:border-sky-500 transition p-8 text-left group"
         >
-          <div className="text-2xl font-semibold mb-2 group-hover:text-purple-400 transition">
-            Join Room
+          <div className="text-2xl font-semibold mb-2 group-hover:text-sky-400 transition">
+            Decode
           </div>
           <div className="text-slate-400">
-            Got a room code from a friend? Jump in.
+            Two teams, secret keywords, coded clues. Intercept the other team's
+            code before they intercept yours. 4–8 players.
           </div>
         </button>
       </div>
+
+      <button
+        onClick={onJoin}
+        className="mt-6 w-full max-w-2xl rounded-2xl border border-slate-800 bg-slate-900 hover:bg-slate-800 hover:border-slate-700 transition p-6 text-left group"
+      >
+        <div className="text-xl font-semibold mb-1 group-hover:text-purple-400 transition">
+          Join Room
+        </div>
+        <div className="text-slate-400 text-sm">
+          Got a room code from a friend? Jump in.
+        </div>
+      </button>
     </div>
   )
 }

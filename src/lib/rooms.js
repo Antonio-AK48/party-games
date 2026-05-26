@@ -17,6 +17,7 @@ import {
   TIEBREAKER_SCORES_MS,
   TOTAL_ROUNDS,
 } from './game'
+import { buildInitialCipherState, CIPHER_MIN_PLAYERS } from './cipher'
 
 // ---- Room data model (Realtime Database) -----------------------------------
 // rooms/{CODE}
@@ -50,12 +51,15 @@ async function freshCode() {
 
 // ---- Lobby -----------------------------------------------------------------
 
-export async function createRoom(name) {
+// gameType picks which game lives in this room — 'captions' (Quiplash-style,
+// the default) or 'cipher' (Decode). Lobby + game routing branch on this.
+export async function createRoom(name, gameType = 'captions') {
   const uid = await ensureAuth()
   const code = await freshCode()
   await set(ref(db, `rooms/${code}`), {
     meta: {
       status: 'lobby',
+      gameType,
       hostId: uid,
       round: 0,
       createdAt: serverTimestamp(),
@@ -191,10 +195,32 @@ export async function startAnswering(code, durationMs) {
 }
 
 export async function startGame(code) {
+  const metaSnap = await get(ref(db, `rooms/${code}/meta`))
+  const meta = metaSnap.val() || {}
+  if (meta.gameType === 'cipher') return startCipherGame(code)
+  // Default = captions (Quiplash-style).
   await update(ref(db, `rooms/${code}/meta`), {
     promptOrder: buildPromptOrder(),
   })
   return beginRound(code, 1)
+}
+
+// Decode (cipher) game start: auto-assigns teams, draws 4 keywords per team,
+// and lands the room in the first round. The cipher round loop (clues → guess
+// → reveal) gets wired up in the next phase.
+async function startCipherGame(code) {
+  const players = await playersOrdered(code)
+  const uids = players.map((p) => p.uid)
+  if (uids.length < CIPHER_MIN_PLAYERS) {
+    throw new Error(`Decode needs at least ${CIPHER_MIN_PLAYERS} players`)
+  }
+  const initial = buildInitialCipherState(uids)
+  await update(ref(db), {
+    [`rooms/${code}/cipher`]: initial,
+    [`rooms/${code}/meta/status`]: 'cipher-active',
+    [`rooms/${code}/meta/round`]: initial.round,
+    [`rooms/${code}/meta/phaseEndsAt`]: null,
+  })
 }
 
 export function beginNextRound(code, round) {
@@ -218,6 +244,7 @@ export async function playAgain(code) {
     [`rooms/${code}/round3`]: null,
     [`rooms/${code}/tiebreaker`]: null,
     [`rooms/${code}/finalStandings`]: null,
+    [`rooms/${code}/cipher`]: null,
   }
   Object.keys(players).forEach((uid) => {
     updates[`rooms/${code}/players/${uid}/score`] = 0

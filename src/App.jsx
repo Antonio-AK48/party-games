@@ -4,6 +4,7 @@ import CreateForm from './components/CreateForm'
 import JoinForm from './components/JoinForm'
 import Lobby from './components/Lobby'
 import Game from './components/Game'
+import CipherGame from './components/CipherGame'
 import SetupNotice from './components/SetupNotice'
 import useRoom from './hooks/useRoom'
 import { isConfigured, ensureAuth } from './lib/firebase'
@@ -45,6 +46,8 @@ function Shell({ children }) {
 
 function App() {
   const [view, setView] = useState('home') // 'home' | 'create' | 'join'
+  // Which game the create flow is spinning up — 'captions' (default) or 'cipher'.
+  const [createGameType, setCreateGameType] = useState('captions')
   const [session, setSession] = useState(null) // { code, uid }
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -115,7 +118,7 @@ function App() {
     setBusy(true)
     setError('')
     try {
-      const s = await createRoom(name)
+      const s = await createRoom(name, createGameType)
       saveSession(s.code)
       setSession(s)
     } catch (e) {
@@ -176,6 +179,7 @@ function App() {
             myUid={session.uid}
             players={players}
             isHost={isHost}
+            gameType={room?.meta?.gameType || 'captions'}
             onLeave={handleLeave}
             onStart={() => startGame(session.code)}
             onPickAvatar={(id) => claimAvatar(session.code, session.uid, id)}
@@ -184,15 +188,26 @@ function App() {
       )
     }
 
+    const gameType = room?.meta?.gameType || 'captions'
     return (
       <Shell>
-        <Game
-          room={room}
-          code={session.code}
-          uid={session.uid}
-          isHost={isHost}
-          onLeave={handleLeave}
-        />
+        {gameType === 'cipher' ? (
+          <CipherGame
+            room={room}
+            code={session.code}
+            uid={session.uid}
+            isHost={isHost}
+            onLeave={handleLeave}
+          />
+        ) : (
+          <Game
+            room={room}
+            code={session.code}
+            uid={session.uid}
+            isHost={isHost}
+            onLeave={handleLeave}
+          />
+        )}
       </Shell>
     )
   }
@@ -202,7 +217,10 @@ function App() {
     <Shell>
       {view === 'home' && (
         <Home
-          onCreate={() => setView('create')}
+          onCreate={(gameType) => {
+            setCreateGameType(gameType)
+            setView('create')
+          }}
           onJoin={() => setView('join')}
         />
       )}
@@ -212,6 +230,7 @@ function App() {
           onBack={backHome}
           busy={busy}
           error={error}
+          gameType={createGameType}
         />
       )}
       {view === 'join' && (

@@ -1,7 +1,13 @@
 import { useState } from 'react'
 
-function CreateForm({ onSubmit, onBack, busy, error }) {
+const GAME_LABELS = {
+  captions: 'Captions',
+  cipher: 'Decode',
+}
+
+function CreateForm({ onSubmit, onBack, busy, error, gameType = 'captions' }) {
   const [name, setName] = useState('')
+  const label = GAME_LABELS[gameType] || 'Game'
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -18,7 +24,7 @@ function CreateForm({ onSubmit, onBack, busy, error }) {
           ← Back
         </button>
 
-        <h2 className="text-3xl font-bold mb-2">Create a Room</h2>
+        <h2 className="text-3xl font-bold mb-2">Create a {label} Room</h2>
         <p className="text-slate-400 mb-8">
           Pick a name. We'll generate a room code you can share.
         </p>
