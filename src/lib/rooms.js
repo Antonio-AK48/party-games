@@ -17,7 +17,14 @@ import {
   TIEBREAKER_SCORES_MS,
   TOTAL_ROUNDS,
 } from './game'
-import { buildInitialCipherState, CIPHER_MIN_PLAYERS } from './cipher'
+import {
+  buildInitialCipherState,
+  CIPHER_MIN_PLAYERS,
+  CIPHER_REVEAL_MS,
+  generateCode,
+  pickEncryptor,
+  toArr as cipherToArr,
+} from './cipher'
 
 // ---- Room data model (Realtime Database) -----------------------------------
 // rooms/{CODE}
@@ -206,8 +213,7 @@ export async function startGame(code) {
 }
 
 // Decode (cipher) game start: auto-assigns teams, draws 4 keywords per team,
-// and lands the room in the first round. The cipher round loop (clues → guess
-// → reveal) gets wired up in the next phase.
+// and lands the room ready for the cipher host loop to kick off round 1.
 async function startCipherGame(code) {
   const players = await playersOrdered(code)
   const uids = players.map((p) => p.uid)
@@ -219,6 +225,88 @@ async function startCipherGame(code) {
     [`rooms/${code}/cipher`]: initial,
     [`rooms/${code}/meta/status`]: 'cipher-active',
     [`rooms/${code}/meta/round`]: initial.round,
+    [`rooms/${code}/meta/phaseEndsAt`]: null,
+  })
+}
+
+// ---- Cipher (Decode) phase writers -----------------------------------------
+// All called by useCipherHostLoop on the host's tick except submitCipherClues,
+// updateCipherGuess, and lockCipherGuess which are direct player actions.
+
+// Open a new round: pick encryptors (round-robin within each team), generate
+// fresh 3-digit codes for both teams, switch to the clues phase.
+export async function startCipherRound(code, round, cipherState) {
+  const teamAPlayers = cipherToArr(cipherState?.teamA?.players)
+  const teamBPlayers = cipherToArr(cipherState?.teamB?.players)
+  const encryptors = {
+    A: pickEncryptor(teamAPlayers, round),
+    B: pickEncryptor(teamBPlayers, round),
+  }
+  const codes = {
+    A: generateCode(),
+    B: generateCode(),
+  }
+  await update(ref(db), {
+    [`rooms/${code}/cipher/rounds/${round}/codes`]: codes,
+    [`rooms/${code}/cipher/rounds/${round}/encryptors`]: encryptors,
+    [`rooms/${code}/cipher/round`]: round,
+    [`rooms/${code}/meta/round`]: round,
+    [`rooms/${code}/meta/status`]: 'cipher-clues',
+    [`rooms/${code}/meta/phaseEndsAt`]: null,
+  })
+}
+
+// Encryptor submits the three clues for their team this round.
+export async function submitCipherClues(code, round, team, clues) {
+  await set(
+    ref(db, `rooms/${code}/cipher/rounds/${round}/clues/${team}`),
+    clues
+  )
+}
+
+// Save a team's working guess (any team member can call; latest write wins).
+// `own` is the team's guess of their own code; `opp` is their intercept attempt.
+export async function updateCipherGuess(code, round, team, own, opp) {
+  await update(
+    ref(db, `rooms/${code}/cipher/rounds/${round}/guesses/${team}`),
+    { own, opp, locked: false }
+  )
+}
+
+// Lock a team's guess — host loop advances once both teams are locked.
+export async function lockCipherGuess(code, round, team) {
+  await update(
+    ref(db, `rooms/${code}/cipher/rounds/${round}/guesses/${team}`),
+    { locked: true }
+  )
+}
+
+// Status-only flip when both teams have submitted clues — opens guessing.
+export async function startCipherGuessing(code) {
+  await update(ref(db, `rooms/${code}/meta`), {
+    status: 'cipher-guessing',
+    phaseEndsAt: null,
+  })
+}
+
+// Write a round's evaluated result + new team token totals; switch to reveal.
+export async function applyCipherResult(code, round, result, teamA, teamB) {
+  await update(ref(db), {
+    [`rooms/${code}/cipher/rounds/${round}/result`]: result,
+    [`rooms/${code}/cipher/teamA/intercepts`]: teamA.intercepts,
+    [`rooms/${code}/cipher/teamA/miscoms`]: teamA.miscoms,
+    [`rooms/${code}/cipher/teamB/intercepts`]: teamB.intercepts,
+    [`rooms/${code}/cipher/teamB/miscoms`]: teamB.miscoms,
+    [`rooms/${code}/meta/status`]: 'cipher-reveal',
+    [`rooms/${code}/meta/phaseEndsAt`]: Date.now() + CIPHER_REVEAL_MS,
+  })
+}
+
+// Game over.
+export async function endCipherGame(code, winner) {
+  await update(ref(db), {
+    [`rooms/${code}/cipher/winner`]: winner,
+    [`rooms/${code}/meta/status`]: 'cipher-scoreboard',
     [`rooms/${code}/meta/phaseEndsAt`]: null,
   })
 }

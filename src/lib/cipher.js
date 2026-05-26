@@ -20,6 +20,9 @@ export const CODE_LENGTH = 3
 export const MAX_ROUNDS = 8
 export const WIN_INTERCEPTS = 2
 export const LOSE_MISCOMS = 2
+// How long the reveal screen lingers after a round so everyone can read the
+// codes, the clues, and who got intercepted / miscommed.
+export const CIPHER_REVEAL_MS = 8_000
 
 // Fisher-Yates copy-shuffle.
 function shuffle(input) {
@@ -101,8 +104,70 @@ export function teamOf(uid, cipher) {
 
 // RTDB normalises integer-keyed arrays into plain objects on read — turn either
 // shape back into a plain array.
-function toArr(x) {
+export function toArr(x) {
   if (!x) return []
   if (Array.isArray(x)) return x
   return Object.values(x)
+}
+
+// Strict per-index match of two coded sequences (handles RTDB array-as-object).
+function codesMatch(a, b) {
+  const ax = toArr(a)
+  const bx = toArr(b)
+  if (ax.length !== bx.length || ax.length === 0) return false
+  return ax.every((v, i) => Number(v) === Number(bx[i]))
+}
+
+// Evaluate one completed round's guesses against the actual codes.
+// `roundData` shape: { codes: { A, B }, guesses: { A: { own, opp }, B: same } }.
+// Returns per-team flags: { ownCorrect, oppCorrect, gotIntercept, gotMiscom }.
+// gotIntercept = correctly guessed the opposing team's code (earns a token).
+// gotMiscom    = failed to guess your own code (earns a miscommunication token).
+export function evaluateRound(roundData) {
+  const codes = roundData?.codes || {}
+  const guesses = roundData?.guesses || {}
+  const A_own = codesMatch(guesses.A?.own, codes.A)
+  const A_opp = codesMatch(guesses.A?.opp, codes.B)
+  const B_own = codesMatch(guesses.B?.own, codes.B)
+  const B_opp = codesMatch(guesses.B?.opp, codes.A)
+  return {
+    A: { ownCorrect: A_own, oppCorrect: A_opp, gotIntercept: A_opp, gotMiscom: !A_own },
+    B: { ownCorrect: B_own, oppCorrect: B_opp, gotIntercept: B_opp, gotMiscom: !B_own },
+  }
+}
+
+// Has the game ended after this round? Standard Decrypto: WIN_INTERCEPTS to win,
+// LOSE_MISCOMS to lose. If both teams hit thresholds the same round, more
+// intercepts wins (tie if equal). At MAX_ROUNDS, more intercepts wins.
+// Returns { ended: true, winner: 'A' | 'B' | 'tie' } or { ended: false }.
+export function checkWinner(teamA, teamB, round) {
+  const aI = teamA?.intercepts || 0
+  const bI = teamB?.intercepts || 0
+  const aM = teamA?.miscoms || 0
+  const bM = teamB?.miscoms || 0
+  // Team gets a "good outcome" if it hit WIN_INTERCEPTS itself OR its opponent
+  // hit LOSE_MISCOMS this round. Both at once = tiebreaker by intercepts.
+  const aGood = aI >= WIN_INTERCEPTS || bM >= LOSE_MISCOMS
+  const bGood = bI >= WIN_INTERCEPTS || aM >= LOSE_MISCOMS
+  const tiebreak = () => {
+    if (aI > bI) return 'A'
+    if (bI > aI) return 'B'
+    return 'tie'
+  }
+  if (aGood && bGood) return { ended: true, winner: tiebreak() }
+  if (aGood) return { ended: true, winner: 'A' }
+  if (bGood) return { ended: true, winner: 'B' }
+  if (round >= MAX_ROUNDS) return { ended: true, winner: tiebreak() }
+  return { ended: false }
+}
+
+// Validate a 3-digit guess: length CODE_LENGTH, each digit 1..KEYWORDS_PER_TEAM,
+// no repeats. Used in the guess UI to gate "Submit."
+export function isValidCode(code) {
+  const arr = toArr(code).map(Number)
+  if (arr.length !== CODE_LENGTH) return false
+  if (arr.some((n) => !Number.isInteger(n) || n < 1 || n > KEYWORDS_PER_TEAM)) {
+    return false
+  }
+  return new Set(arr).size === arr.length
 }
