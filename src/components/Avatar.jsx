@@ -7,7 +7,13 @@ function Avatar({ name, avatar, className = 'w-9 h-9 text-base' }) {
       className={`${className} rounded-full bg-purple-600 flex items-center justify-center font-semibold overflow-hidden shrink-0`}
     >
       {url ? (
-        <img src={url} alt={name} className="w-full h-full object-cover" />
+        <img
+          src={url}
+          alt={name}
+          loading="lazy"
+          decoding="async"
+          className="w-full h-full object-cover"
+        />
       ) : (
         name?.[0]?.toUpperCase() || '?'
       )}

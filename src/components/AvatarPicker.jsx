@@ -33,6 +33,7 @@ function AvatarPicker({ value, onChange, takenIds = [] }) {
             <img
               src={a.url}
               alt={a.id}
+              decoding="async"
               className={`w-full h-full object-cover ${
                 locked ? 'grayscale opacity-25' : ''
               }`}
