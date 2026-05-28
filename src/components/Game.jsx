@@ -18,6 +18,8 @@ import {
   submitTiebreakerVote,
   placeBet,
   intervene,
+  claimIntervention,
+  releaseIntervention,
   submitRound3Prompt,
   submitRound3Answer,
   submitRound3Choice,
@@ -35,6 +37,7 @@ import {
   BET_FROM_ROUND,
   INTERVENTION_MIN_PLAYERS,
   INTERVENTION_EXCLUDE_TOP,
+  INTERVENTION_TYPE_MS,
   topScorerUids,
   settleMatchupWagers,
   R3_PROMPT_MS,
@@ -227,7 +230,7 @@ function Game({ room, code, uid, isHost, onLeave }) {
 
   if (!room?.meta) return <Centered>Loading…</Centered>
 
-  const { round = 1, phaseEndsAt } = room.meta
+  const { round = 1, phaseEndsAt, voteLockEndsAt } = room.meta
   const playersMap = room.players || {}
   const nameOf = (id) => playersMap[id]?.name || 'Someone'
   const matchups = toArray(room.rounds?.[round]?.matchups)
@@ -315,9 +318,25 @@ function Game({ room, code, uid, isHost, onLeave }) {
     const myVote = m.votes && m.votes[uid]
     const votedIndex = myVote != null ? targets.indexOf(myVote) : null
 
+    // Voting is locked until the host opens the clock (phaseEndsAt). The host only
+    // does that once the read window AND any in-flight intervention have cleared,
+    // so this single flag is the authoritative "can't vote yet" — no client-clock
+    // race can let a vote slip in before an intervention lands.
+    const claim = m.interventionClaim
+    const inReadWindow = !!voteLockEndsAt && now < voteLockEndsAt
+    const claimActive =
+      !!claim && !iv && now < (claim.at || 0) + INTERVENTION_TYPE_MS
+    const voteLocked = !phaseEndsAt
+    const lockSecondsLeft = inReadWindow
+      ? Math.max(0, Math.ceil((voteLockEndsAt - now) / 1000))
+      : null
+    const iClaimed = !!claim && claim.uid === uid && !iv
+
     // Intervention eligibility: feature on, slot still open, not your own
     // matchup, enough players, not a current top-2 leader, and you haven't
-    // already stepped in somewhere this round.
+    // already stepped in somewhere this round. Plus: only during the read window,
+    // and only if nobody else is mid-claim — interventions can't open once voting
+    // has started.
     const playerCount = Object.keys(playersMap).length
     const topUids = topScorerUids(playersMap, INTERVENTION_EXCLUDE_TOP)
     const interveneElsewhere = matchups.some(
@@ -329,7 +348,9 @@ function Game({ room, code, uid, isHost, onLeave }) {
       !iAmAuthor &&
       playerCount >= INTERVENTION_MIN_PLAYERS &&
       !topUids.has(uid) &&
-      !interveneElsewhere
+      !interveneElsewhere &&
+      inReadWindow &&
+      !claimActive
 
     return (
       <RoundBadge round={round}>
@@ -339,9 +360,16 @@ function Game({ room, code, uid, isHost, onLeave }) {
           answers={answers}
           isAuthor={iAmAuthor || iIntervened}
           votedIndex={votedIndex}
-          interventionIndex={iv ? targets.length - 1 : null}
+          voteLocked={voteLocked}
+          lockSecondsLeft={lockSecondsLeft}
           canIntervene={canIntervene}
+          iClaimed={iClaimed}
           interventionStake={interventionStake(round)}
+          typeMs={INTERVENTION_TYPE_MS}
+          onClaim={() => claimIntervention(code, round, voteIndex, uid)}
+          onCancelIntervene={() =>
+            releaseIntervention(code, round, voteIndex, uid).catch(() => {})
+          }
           onIntervene={(text) =>
             intervene(code, round, voteIndex, uid, text, interventionStake(round)).catch(
               () => {}

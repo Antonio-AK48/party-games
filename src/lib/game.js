@@ -7,6 +7,11 @@ export const ANSWER_MS = 90_000
 export const VOTE_MS = 20_000
 export const RESULTS_MS = 5_000
 export const TOTAL_ROUNDS = 3
+// Each matchup opens with a short read-only window: votes are locked so everyone
+// takes in the prompt + answers first, and it's the only time a player may step
+// in (see intervention below). The host doesn't start the VOTE_MS clock until
+// this window — and any in-flight intervention — has cleared (see isVotingLocked).
+export const VOTE_LOCK_MS = 6_000
 export const POINTS_PER_VOTE = 100
 // Later rounds are worth more (points = POINTS_PER_VOTE * round) so a player who
 // fell behind early can still mount a comeback in the final round. And sweeping
@@ -29,6 +34,11 @@ export const SWEEP_MIN_VOTERS = 2
 export const BET_FROM_ROUND = 2
 export const INTERVENTION_MIN_PLAYERS = 6
 export const INTERVENTION_EXCLUDE_TOP = 2
+// Once a player claims the intervention slot during the read window, voting stays
+// locked for everyone until they submit — so no vote can ever land before an
+// intervention does. This caps how long that hold lasts (and how long the
+// claimer has to type) so an abandoned claim can't freeze the matchup.
+export const INTERVENTION_TYPE_MS = 20_000
 // Even-money self-bet: win +stake / lose −stake, settled vs. your co-author only.
 export const BET_STAKE = POINTS_PER_VOTE
 // Risk-bet intervention: win +stake (strictly most votes) / lose −stake (dead last).
@@ -186,6 +196,24 @@ export function allAnswersIn(matchups) {
     const answers = m.answers || {}
     return arr(m.authors).every((uid) => answers[uid] != null)
   })
+}
+
+// Voting on a matchup is locked while either (a) the opening read window is still
+// running, or (b) someone has claimed the intervention slot and is still typing
+// it in (their claim hasn't been filled and hasn't timed out). Releasing only
+// once both clear is what guarantees no vote precedes an intervention. Treats a
+// missing voteLockEndsAt as "window already over" so older rooms behave normally.
+export function isVotingLocked(matchup, voteLockEndsAt, now) {
+  if (voteLockEndsAt && now < voteLockEndsAt) return true
+  const claim = matchup?.interventionClaim
+  if (
+    claim &&
+    !matchup.intervention &&
+    now < (claim.at || 0) + INTERVENTION_TYPE_MS
+  ) {
+    return true
+  }
+  return false
 }
 
 // Everyone who isn't an author of this matchup has cast a vote on it. An
