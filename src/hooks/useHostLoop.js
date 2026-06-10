@@ -14,11 +14,13 @@ import {
   startRound3Judging,
   showRound3Reveal,
   autopickRound3,
+  dropPendingIntervention,
 } from '../lib/rooms'
 import {
   ANSWER_MS,
   VOTE_MS,
   RESULTS_MS,
+  INTERVENTION_RESUME_MS,
   TIEBREAKER_VS_MS,
   TOTAL_ROUNDS,
   R3_PROMPT_MS,
@@ -160,7 +162,23 @@ export default function useHostLoop({ room, code, isHost }) {
           }
         } else if (status === 'voting') {
           const m = matchups[voteIndex]
-          if (m && (allVotesIn(m, uids) || expired)) {
+          const iv = m?.intervention
+          // A reservation with no answer yet = someone is mid-step-in. Hold the
+          // round open (don't advance, even if everyone else has voted) so the
+          // third answer can land and the paused voters get to weigh in. The only
+          // exception is a stale reservation whose writing clock ran out — drop it
+          // and let voting resume.
+          const ivPending = iv && iv.answer == null
+          if (ivPending) {
+            if (iv.writeEndsAt && Date.now() >= iv.writeEndsAt) {
+              await dropPendingIntervention(
+                code,
+                round,
+                voteIndex,
+                Date.now() + INTERVENTION_RESUME_MS
+              )
+            }
+          } else if (m && (allVotesIn(m, uids) || expired)) {
             pendingRef.current = 'results'
             await showResults(code, RESULTS_MS)
           }

@@ -123,16 +123,23 @@ function codesMatch(a, b) {
 // Returns per-team flags: { ownCorrect, oppCorrect, gotIntercept, gotMiscom }.
 // gotIntercept = correctly guessed the opposing team's code (earns a token).
 // gotMiscom    = failed to guess your own code (earns a miscommunication token).
-export function evaluateRound(roundData) {
+//
+// Round 1 is intel-only, as in standard Decrypto: there's no interception yet —
+// teams just decode their own code and get to SEE the enemy's revealed code and
+// clues to start building a read on their keywords. So interception tokens are
+// suppressed in round 1 (oppCorrect is still reported for the reveal's ✓/✗, it
+// just doesn't earn a token). Miscommunications count from round 1.
+export function evaluateRound(roundData, round = 1) {
   const codes = roundData?.codes || {}
   const guesses = roundData?.guesses || {}
   const A_own = codesMatch(guesses.A?.own, codes.A)
   const A_opp = codesMatch(guesses.A?.opp, codes.B)
   const B_own = codesMatch(guesses.B?.own, codes.B)
   const B_opp = codesMatch(guesses.B?.opp, codes.A)
+  const canIntercept = round > 1
   return {
-    A: { ownCorrect: A_own, oppCorrect: A_opp, gotIntercept: A_opp, gotMiscom: !A_own },
-    B: { ownCorrect: B_own, oppCorrect: B_opp, gotIntercept: B_opp, gotMiscom: !B_own },
+    A: { ownCorrect: A_own, oppCorrect: A_opp, gotIntercept: canIntercept && A_opp, gotMiscom: !A_own },
+    B: { ownCorrect: B_own, oppCorrect: B_opp, gotIntercept: canIntercept && B_opp, gotMiscom: !B_own },
   }
 }
 

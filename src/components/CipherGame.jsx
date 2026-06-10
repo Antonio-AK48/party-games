@@ -7,6 +7,7 @@ import useCipherHostLoop from '../hooks/useCipherHostLoop'
 import {
   submitCipherClues,
   updateCipherGuess,
+  lockCipherOwnGuess,
   lockCipherGuess,
 } from '../lib/rooms'
 import {
@@ -270,11 +271,14 @@ function CipherGame({ room, code, uid, isHost, onLeave }) {
             mySide={mySide}
             myTeam={myTeam}
             currentRound={currentRound}
+            round={round}
+            myUid={uid}
             themeA={THEME_A}
             themeB={THEME_B}
             onUpdateGuess={(own, opp) =>
               updateCipherGuess(code, round, mySide, own, opp)
             }
+            onLockOwn={() => lockCipherOwnGuess(code, round, mySide)}
             onLockGuess={() => lockCipherGuess(code, round, mySide)}
           />
         )}
@@ -282,6 +286,7 @@ function CipherGame({ room, code, uid, isHost, onLeave }) {
         {status === 'cipher-reveal' && (
           <CipherReveal
             currentRound={currentRound}
+            round={round}
             themeA={THEME_A}
             themeB={THEME_B}
           />

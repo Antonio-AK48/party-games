@@ -4,7 +4,7 @@ import prompts from '../data/prompts'
 // the host actually advances as soon as everyone has acted, so these only bite
 // when someone is slow or disconnected.
 export const ANSWER_MS = 90_000
-export const VOTE_MS = 20_000
+export const VOTE_MS = 25_000
 export const RESULTS_MS = 5_000
 export const TOTAL_ROUNDS = 3
 export const POINTS_PER_VOTE = 100
@@ -33,6 +33,15 @@ export const INTERVENTION_EXCLUDE_TOP = 2
 export const BET_STAKE = POINTS_PER_VOTE
 // Risk-bet intervention: win +stake (strictly most votes) / lose −stake (dead last).
 export const interventionStake = (round) => POINTS_PER_VOTE * round * 2
+// Intervention is a two-step "step in" so it can be both visible and fair (see
+// the voting branch in useHostLoop): claiming the slot pauses the round and fires
+// the anonymous flash for everyone, the intervener then gets INTERVENTION_WRITE_MS
+// to write, and once they submit the others get a fresh INTERVENTION_POST_VOTE_MS
+// to vote with all three answers on screen. RESUME_MS is the short grace window
+// the round falls back to if the intervener bails or runs out the writing clock.
+export const INTERVENTION_WRITE_MS = 35_000
+export const INTERVENTION_POST_VOTE_MS = 18_000
+export const INTERVENTION_RESUME_MS = 12_000
 
 // ---- Round 3: "Author's Cut" — player-written prompts -----------------------
 // Every player writes one prompt; each prompt is then answered by
@@ -292,7 +301,9 @@ export function settleMatchupWagers(matchup) {
 
   let intervention = null
   const iv = matchup.intervention
-  if (iv && iv.uid != null) {
+  // Only a completed step-in (answer written) settles — a reservation the writer
+  // never finished is treated as if it never happened.
+  if (iv && iv.uid != null && iv.answer != null) {
     const ivVotes = countFor(iv.uid)
     const authorVotes = authors.map(countFor)
     const result = authorVotes.every((v) => ivVotes > v)

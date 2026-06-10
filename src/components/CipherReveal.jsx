@@ -43,7 +43,7 @@ function GuessRow({ label, guess, code, theme }) {
   )
 }
 
-function TeamPanel({ label, theme, clues, code, guessesByOther, resultForThisTeam }) {
+function TeamPanel({ label, theme, clues, code, guessesByOther, resultForThisTeam, intelOnly }) {
   return (
     <div className={`rounded-2xl border p-5 ${theme.border} ${theme.bg}`}>
       <div className="flex items-center justify-between mb-3">
@@ -78,12 +78,18 @@ function TeamPanel({ label, theme, clues, code, guessesByOther, resultForThisTea
           code={code}
           theme={theme}
         />
-        <GuessRow
-          label="Intercept attempt"
-          guess={guessesByOther.oppByOther}
-          code={code}
-          theme={theme}
-        />
+        {intelOnly ? (
+          <p className="text-sm text-slate-500 py-1.5">
+            No intercept attempt — round 1 is intel-only.
+          </p>
+        ) : (
+          <GuessRow
+            label="Intercept attempt"
+            guess={guessesByOther.oppByOther}
+            code={code}
+            theme={theme}
+          />
+        )}
       </div>
 
       <div className="mt-3 flex flex-wrap gap-2">
@@ -107,17 +113,20 @@ function TeamPanel({ label, theme, clues, code, guessesByOther, resultForThisTea
   )
 }
 
-function CipherReveal({ currentRound, themeA, themeB }) {
+function CipherReveal({ currentRound, round, themeA, themeB }) {
   const result = currentRound?.result || { A: {}, B: {} }
+  // Round 1 is intel-only — no interception happened, so hide the empty attempt.
+  const intelOnly = (round || 1) <= 1
   return (
     <div className="space-y-4">
       <p className="text-center text-slate-400 text-sm uppercase tracking-wider">
-        Round reveal
+        Round reveal{intelOnly ? ' · intel only' : ''}
       </p>
       <div className="grid sm:grid-cols-2 gap-3">
         <TeamPanel
           label="Team A"
           theme={themeA}
+          intelOnly={intelOnly}
           clues={currentRound.clues?.A}
           code={currentRound.codes?.A}
           guessesByOther={{
@@ -136,6 +145,7 @@ function CipherReveal({ currentRound, themeA, themeB }) {
         <TeamPanel
           label="Team B"
           theme={themeB}
+          intelOnly={intelOnly}
           clues={currentRound.clues?.B}
           code={currentRound.codes?.B}
           guessesByOther={{

@@ -273,6 +273,17 @@ export async function updateCipherGuess(code, round, team, own, opp) {
   )
 }
 
+// Commit a team's own-code decode before the opponent's clues are revealed. This
+// is the gate for the two-step guess: the team can't see the enemy clues (and so
+// can't start intercepting) until their own code is locked in. Round 1 skips this
+// and goes straight to lockCipherGuess, since there's no interception yet.
+export async function lockCipherOwnGuess(code, round, team) {
+  await update(
+    ref(db, `rooms/${code}/cipher/rounds/${round}/guesses/${team}`),
+    { ownLocked: true }
+  )
+}
+
 // Lock a team's guess — host loop advances once both teams are locked.
 export async function lockCipherGuess(code, round, team) {
   await update(
@@ -458,20 +469,77 @@ export async function placeBet(code, round, matchupId, uid, stake) {
   )
 }
 
-// Step into a flopped matchup with a third answer + stake. There's exactly one
-// slot per matchup, so this runs as a transaction: the first writer wins and any
-// simultaneous challenger is rejected.
-export async function intervene(code, round, matchupId, uid, text, stake) {
+// Intervention is two steps so it can be announced before the answer exists.
+//
+// Step 1 — claim the slot. There's exactly one slot per matchup, so this runs as
+// a transaction: the first to step in wins and any simultaneous challenger is
+// rejected. The reservation carries `pending: true` (no answer yet) plus a
+// `writeEndsAt` deadline; the host holds the round open until the answer lands or
+// that deadline passes. We also push meta.phaseEndsAt out to the writing deadline
+// so the round can't time out from under the writer.
+export async function startIntervention(code, round, matchupId, uid, stake, writeEndsAt) {
   const ivRef = ref(
     db,
     `rooms/${code}/rounds/${round}/matchups/${matchupId}/intervention`
   )
   const res = await runTransaction(ivRef, (cur) => {
     if (cur) return undefined // slot already taken — abort
+    return { uid, stake, pending: true, writeEndsAt }
+  })
+  if (!res.committed) {
+    throw new Error('Someone already stepped in on this one')
+  }
+  await update(ref(db, `rooms/${code}/meta`), { phaseEndsAt: writeEndsAt })
+}
+
+// Step 2 — fill in the answer. Completes our own reservation (or claims an open
+// slot outright, e.g. if step 1's write hadn't landed yet). Dropping `pending`
+// and writing `answer` is what tells the host the third answer is live; we then
+// open a fresh INTERVENTION_POST_VOTE_MS window (voteEndsAt) so everyone gets to
+// vote with all three answers on screen.
+export async function intervene(code, round, matchupId, uid, text, stake, voteEndsAt) {
+  const ivRef = ref(
+    db,
+    `rooms/${code}/rounds/${round}/matchups/${matchupId}/intervention`
+  )
+  const res = await runTransaction(ivRef, (cur) => {
+    if (cur && cur.uid !== uid) return undefined // someone else holds the slot
     return { uid, answer: text, stake }
   })
   if (!res.committed) {
     throw new Error('Someone already stepped in on this one')
+  }
+  if (voteEndsAt) {
+    await update(ref(db, `rooms/${code}/meta`), { phaseEndsAt: voteEndsAt })
+  }
+}
+
+// The intervener backs out before submitting — drop our own pending reservation
+// (never a submitted answer) and let voting resume promptly for everyone waiting.
+export async function cancelIntervention(code, round, matchupId, uid, resumeEndsAt) {
+  const ivRef = ref(
+    db,
+    `rooms/${code}/rounds/${round}/matchups/${matchupId}/intervention`
+  )
+  await runTransaction(ivRef, (cur) =>
+    cur && cur.uid === uid && cur.answer == null ? null : cur
+  )
+  if (resumeEndsAt) {
+    await update(ref(db, `rooms/${code}/meta`), { phaseEndsAt: resumeEndsAt })
+  }
+}
+
+// Host-side cleanup: a reservation went stale (the writer ran out the writing
+// clock or disconnected without submitting). Clear the pending slot — but never a
+// submitted answer — and hand the round a short grace window to finish voting.
+export async function dropPendingIntervention(code, round, matchupId, resumeEndsAt) {
+  const ivRef = ref(
+    db,
+    `rooms/${code}/rounds/${round}/matchups/${matchupId}/intervention`
+  )
+  await runTransaction(ivRef, (cur) => (cur && cur.answer == null ? null : cur))
+  if (resumeEndsAt) {
+    await update(ref(db, `rooms/${code}/meta`), { phaseEndsAt: resumeEndsAt })
   }
 }
 

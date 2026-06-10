@@ -17,7 +17,9 @@ import {
   submitTiebreakerAnswer,
   submitTiebreakerVote,
   placeBet,
+  startIntervention,
   intervene,
+  cancelIntervention,
   submitRound3Prompt,
   submitRound3Answer,
   submitRound3Choice,
@@ -32,6 +34,9 @@ import {
   multiplierLabel,
   BET_STAKE,
   interventionStake,
+  INTERVENTION_WRITE_MS,
+  INTERVENTION_POST_VOTE_MS,
+  INTERVENTION_RESUME_MS,
   BET_FROM_ROUND,
   INTERVENTION_MIN_PLAYERS,
   INTERVENTION_EXCLUDE_TOP,
@@ -303,15 +308,21 @@ function Game({ room, code, uid, isHost, onLeave }) {
     if (!m) return <Waiting title="Hang tight" subtitle="Setting up the vote…" />
 
     const authors = authorsOf(m)
-    // An intervention adds a visible third answer; vote targets line up with the
-    // answers shown so an index maps cleanly back to its author/intervener uid.
+    // An intervention has two states: `pending` (someone has stepped in and is
+    // writing — the round is paused and everyone but them sees the anonymous
+    // flash) and `active` (their answer is in, shown as a visible third option).
+    // Only an active intervention adds a vote target so an index maps cleanly
+    // back to its author/intervener uid.
     const iv = m.intervention
-    const targets = iv ? [...authors, iv.uid] : authors
+    const ivActive = !!iv && iv.answer != null
+    const ivPending = !!iv && iv.answer == null
+    const iAmIntervener = !!iv && iv.uid === uid
+    const targets = ivActive ? [...authors, iv.uid] : authors
     const answers = targets.map((a) =>
-      iv && a === iv.uid ? iv.answer : (m.answers && m.answers[a]) || '(no answer)'
+      ivActive && a === iv.uid ? iv.answer : (m.answers && m.answers[a]) || '(no answer)'
     )
     const iAmAuthor = authors.includes(uid)
-    const iIntervened = !!iv && iv.uid === uid
+    const iIntervened = ivActive && iAmIntervener
     const myVote = m.votes && m.votes[uid]
     const votedIndex = myVote != null ? targets.indexOf(myVote) : null
 
@@ -331,6 +342,12 @@ function Game({ room, code, uid, isHost, onLeave }) {
       !topUids.has(uid) &&
       !interveneElsewhere
 
+    // The timer bar's full scale follows whichever window we're in: the base
+    // vote, the intervener's writing clock, or the post-intervention re-vote.
+    const voteTotal =
+      (ivActive ? INTERVENTION_POST_VOTE_MS : ivPending ? INTERVENTION_WRITE_MS : VOTE_MS) /
+      1000
+
     return (
       <RoundBadge round={round}>
         <Voting
@@ -339,18 +356,45 @@ function Game({ room, code, uid, isHost, onLeave }) {
           answers={answers}
           isAuthor={iAmAuthor || iIntervened}
           votedIndex={votedIndex}
-          interventionIndex={iv ? targets.length - 1 : null}
+          interventionIndex={ivActive ? targets.length - 1 : null}
+          interventionPending={ivPending}
+          iAmIntervener={iAmIntervener}
           canIntervene={canIntervene}
           interventionStake={interventionStake(round)}
-          onIntervene={(text) =>
-            intervene(code, round, voteIndex, uid, text, interventionStake(round)).catch(
-              () => {}
+          onStartIntervene={() =>
+            startIntervention(
+              code,
+              round,
+              voteIndex,
+              uid,
+              interventionStake(round),
+              Date.now() + INTERVENTION_WRITE_MS
             )
+          }
+          onIntervene={(text) =>
+            intervene(
+              code,
+              round,
+              voteIndex,
+              uid,
+              text,
+              interventionStake(round),
+              Date.now() + INTERVENTION_POST_VOTE_MS
+            ).catch(() => {})
+          }
+          onCancelIntervene={() =>
+            cancelIntervention(
+              code,
+              round,
+              voteIndex,
+              uid,
+              Date.now() + INTERVENTION_RESUME_MS
+            ).catch(() => {})
           }
           step={voteIndex + 1}
           totalSteps={matchups.length}
           secondsLeft={secondsLeft}
-          total={VOTE_MS / 1000}
+          total={voteTotal}
           onVote={(idx) => submitVote(code, round, voteIndex, uid, targets[idx])}
         />
       </RoundBadge>

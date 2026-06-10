@@ -70,7 +70,7 @@ export default function useCipherHostLoop({ room, code, isHost }) {
           const aLocked = currentRound.guesses?.A?.locked
           const bLocked = currentRound.guesses?.B?.locked
           if (aLocked && bLocked) {
-            const result = evaluateRound(currentRound)
+            const result = evaluateRound(currentRound, round)
             const teamA = {
               intercepts:
                 (cipher.teamA?.intercepts || 0) + (result.A.gotIntercept ? 1 : 0),
