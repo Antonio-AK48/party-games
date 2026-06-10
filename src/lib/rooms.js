@@ -353,10 +353,23 @@ export async function playAgain(code) {
 
 // ---- Phase transitions (host) ----------------------------------------------
 
-export async function startVoting(code, voteIndex, durationMs) {
+// Open a matchup for voting in its locked read window. phaseEndsAt is left null
+// on purpose — the actual vote clock only starts once the read window (and any
+// intervention claimed during it) clears, written by startVoteClock from the
+// host loop. See isVotingLocked.
+export async function startVoting(code, voteIndex, lockMs) {
   await update(ref(db, `rooms/${code}/meta`), {
     status: 'voting',
     voteIndex,
+    voteLockEndsAt: Date.now() + lockMs,
+    phaseEndsAt: null,
+  })
+}
+
+// Start the VOTE_MS countdown the moment the read/intervention lock lifts, so a
+// matchup that was held open for an intervention still gets the full voting time.
+export async function startVoteClock(code, durationMs) {
+  await update(ref(db, `rooms/${code}/meta`), {
     phaseEndsAt: Date.now() + durationMs,
   })
 }
@@ -469,77 +482,51 @@ export async function placeBet(code, round, matchupId, uid, stake) {
   )
 }
 
-// Intervention is two steps so it can be announced before the answer exists.
-//
-// Step 1 — claim the slot. There's exactly one slot per matchup, so this runs as
-// a transaction: the first to step in wins and any simultaneous challenger is
-// rejected. The reservation carries `pending: true` (no answer yet) plus a
-// `writeEndsAt` deadline; the host holds the round open until the answer lands or
-// that deadline passes. We also push meta.phaseEndsAt out to the writing deadline
-// so the round can't time out from under the writer.
-export async function startIntervention(code, round, matchupId, uid, stake, writeEndsAt) {
+// Reserve the (single) intervention slot the instant a player hits "step in",
+// before they've typed anything. The host keeps voting locked for everyone while
+// this claim is live, so no vote can land before the intervention is submitted.
+// Transaction = first claimer wins; a simultaneous challenger is rejected.
+export async function claimIntervention(code, round, matchupId, uid) {
+  const claimRef = ref(
+    db,
+    `rooms/${code}/rounds/${round}/matchups/${matchupId}/interventionClaim`
+  )
+  const res = await runTransaction(claimRef, (cur) => {
+    if (cur) return undefined // someone's already stepping in — abort
+    return { uid, at: Date.now() }
+  })
+  if (!res.committed) {
+    throw new Error('Someone is already stepping in on this one')
+  }
+}
+
+// Drop a claim if the player backs out — releases the voting lock for everyone.
+// Only removes the claim when it's actually theirs (no-op otherwise).
+export async function releaseIntervention(code, round, matchupId, uid) {
+  const claimRef = ref(
+    db,
+    `rooms/${code}/rounds/${round}/matchups/${matchupId}/interventionClaim`
+  )
+  await runTransaction(claimRef, (cur) => {
+    if (cur && cur.uid === uid) return null // remove my claim
+    return undefined // not mine (or already gone) — leave it untouched
+  })
+}
+
+// Step into a flopped matchup with a third answer + stake. There's exactly one
+// slot per matchup, so this runs as a transaction: the first writer wins and any
+// simultaneous challenger is rejected.
+export async function intervene(code, round, matchupId, uid, text, stake) {
   const ivRef = ref(
     db,
     `rooms/${code}/rounds/${round}/matchups/${matchupId}/intervention`
   )
   const res = await runTransaction(ivRef, (cur) => {
     if (cur) return undefined // slot already taken — abort
-    return { uid, stake, pending: true, writeEndsAt }
-  })
-  if (!res.committed) {
-    throw new Error('Someone already stepped in on this one')
-  }
-  await update(ref(db, `rooms/${code}/meta`), { phaseEndsAt: writeEndsAt })
-}
-
-// Step 2 — fill in the answer. Completes our own reservation (or claims an open
-// slot outright, e.g. if step 1's write hadn't landed yet). Dropping `pending`
-// and writing `answer` is what tells the host the third answer is live; we then
-// open a fresh INTERVENTION_POST_VOTE_MS window (voteEndsAt) so everyone gets to
-// vote with all three answers on screen.
-export async function intervene(code, round, matchupId, uid, text, stake, voteEndsAt) {
-  const ivRef = ref(
-    db,
-    `rooms/${code}/rounds/${round}/matchups/${matchupId}/intervention`
-  )
-  const res = await runTransaction(ivRef, (cur) => {
-    if (cur && cur.uid !== uid) return undefined // someone else holds the slot
     return { uid, answer: text, stake }
   })
   if (!res.committed) {
     throw new Error('Someone already stepped in on this one')
-  }
-  if (voteEndsAt) {
-    await update(ref(db, `rooms/${code}/meta`), { phaseEndsAt: voteEndsAt })
-  }
-}
-
-// The intervener backs out before submitting — drop our own pending reservation
-// (never a submitted answer) and let voting resume promptly for everyone waiting.
-export async function cancelIntervention(code, round, matchupId, uid, resumeEndsAt) {
-  const ivRef = ref(
-    db,
-    `rooms/${code}/rounds/${round}/matchups/${matchupId}/intervention`
-  )
-  await runTransaction(ivRef, (cur) =>
-    cur && cur.uid === uid && cur.answer == null ? null : cur
-  )
-  if (resumeEndsAt) {
-    await update(ref(db, `rooms/${code}/meta`), { phaseEndsAt: resumeEndsAt })
-  }
-}
-
-// Host-side cleanup: a reservation went stale (the writer ran out the writing
-// clock or disconnected without submitting). Clear the pending slot — but never a
-// submitted answer — and hand the round a short grace window to finish voting.
-export async function dropPendingIntervention(code, round, matchupId, resumeEndsAt) {
-  const ivRef = ref(
-    db,
-    `rooms/${code}/rounds/${round}/matchups/${matchupId}/intervention`
-  )
-  await runTransaction(ivRef, (cur) => (cur && cur.answer == null ? null : cur))
-  if (resumeEndsAt) {
-    await update(ref(db, `rooms/${code}/meta`), { phaseEndsAt: resumeEndsAt })
   }
 }
 

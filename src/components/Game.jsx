@@ -17,9 +17,9 @@ import {
   submitTiebreakerAnswer,
   submitTiebreakerVote,
   placeBet,
-  startIntervention,
   intervene,
-  cancelIntervention,
+  claimIntervention,
+  releaseIntervention,
   submitRound3Prompt,
   submitRound3Answer,
   submitRound3Choice,
@@ -34,12 +34,10 @@ import {
   multiplierLabel,
   BET_STAKE,
   interventionStake,
-  INTERVENTION_WRITE_MS,
-  INTERVENTION_POST_VOTE_MS,
-  INTERVENTION_RESUME_MS,
   BET_FROM_ROUND,
   INTERVENTION_MIN_PLAYERS,
   INTERVENTION_EXCLUDE_TOP,
+  INTERVENTION_TYPE_MS,
   topScorerUids,
   settleMatchupWagers,
   R3_PROMPT_MS,
@@ -232,7 +230,7 @@ function Game({ room, code, uid, isHost, onLeave }) {
 
   if (!room?.meta) return <Centered>Loading…</Centered>
 
-  const { round = 1, phaseEndsAt } = room.meta
+  const { round = 1, phaseEndsAt, voteLockEndsAt } = room.meta
   const playersMap = room.players || {}
   const nameOf = (id) => playersMap[id]?.name || 'Someone'
   const matchups = toArray(room.rounds?.[round]?.matchups)
@@ -308,27 +306,41 @@ function Game({ room, code, uid, isHost, onLeave }) {
     if (!m) return <Waiting title="Hang tight" subtitle="Setting up the vote…" />
 
     const authors = authorsOf(m)
-    // An intervention has two states: `pending` (someone has stepped in and is
-    // writing — the round is paused and everyone but them sees the anonymous
-    // flash) and `active` (their answer is in, shown as a visible third option).
-    // Only an active intervention adds a vote target so an index maps cleanly
-    // back to its author/intervener uid.
+    // An intervention adds a visible third answer; vote targets line up with the
+    // answers shown so an index maps cleanly back to its author/intervener uid.
     const iv = m.intervention
-    const ivActive = !!iv && iv.answer != null
-    const ivPending = !!iv && iv.answer == null
-    const iAmIntervener = !!iv && iv.uid === uid
-    const targets = ivActive ? [...authors, iv.uid] : authors
+    const targets = iv ? [...authors, iv.uid] : authors
     const answers = targets.map((a) =>
-      ivActive && a === iv.uid ? iv.answer : (m.answers && m.answers[a]) || '(no answer)'
+      iv && a === iv.uid ? iv.answer : (m.answers && m.answers[a]) || '(no answer)'
     )
     const iAmAuthor = authors.includes(uid)
-    const iIntervened = ivActive && iAmIntervener
+    const iIntervened = !!iv && iv.uid === uid
     const myVote = m.votes && m.votes[uid]
     const votedIndex = myVote != null ? targets.indexOf(myVote) : null
 
+    // Voting is locked until the host opens the clock (phaseEndsAt). The host only
+    // does that once the read window AND any in-flight intervention have cleared,
+    // so this single flag is the authoritative "can't vote yet" — no client-clock
+    // race can let a vote slip in before an intervention lands.
+    const claim = m.interventionClaim
+    const inReadWindow = !!voteLockEndsAt && now < voteLockEndsAt
+    const claimActive =
+      !!claim && !iv && now < (claim.at || 0) + INTERVENTION_TYPE_MS
+    const voteLocked = !phaseEndsAt
+    const lockSecondsLeft = inReadWindow
+      ? Math.max(0, Math.ceil((voteLockEndsAt - now) / 1000))
+      : null
+    const iClaimed = !!claim && claim.uid === uid && !iv
+    // Everyone but the claimer sees the anonymous flash while the claim is live.
+    const interventionSecondsLeft = claimActive
+      ? Math.max(0, Math.ceil((claim.at + INTERVENTION_TYPE_MS - now) / 1000))
+      : null
+
     // Intervention eligibility: feature on, slot still open, not your own
     // matchup, enough players, not a current top-2 leader, and you haven't
-    // already stepped in somewhere this round.
+    // already stepped in somewhere this round. Plus: only during the read window,
+    // and only if nobody else is mid-claim — interventions can't open once voting
+    // has started.
     const playerCount = Object.keys(playersMap).length
     const topUids = topScorerUids(playersMap, INTERVENTION_EXCLUDE_TOP)
     const interveneElsewhere = matchups.some(
@@ -340,13 +352,9 @@ function Game({ room, code, uid, isHost, onLeave }) {
       !iAmAuthor &&
       playerCount >= INTERVENTION_MIN_PLAYERS &&
       !topUids.has(uid) &&
-      !interveneElsewhere
-
-    // The timer bar's full scale follows whichever window we're in: the base
-    // vote, the intervener's writing clock, or the post-intervention re-vote.
-    const voteTotal =
-      (ivActive ? INTERVENTION_POST_VOTE_MS : ivPending ? INTERVENTION_WRITE_MS : VOTE_MS) /
-      1000
+      !interveneElsewhere &&
+      inReadWindow &&
+      !claimActive
 
     return (
       <RoundBadge round={round}>
@@ -356,45 +364,27 @@ function Game({ room, code, uid, isHost, onLeave }) {
           answers={answers}
           isAuthor={iAmAuthor || iIntervened}
           votedIndex={votedIndex}
-          interventionIndex={ivActive ? targets.length - 1 : null}
-          interventionPending={ivPending}
-          iAmIntervener={iAmIntervener}
+          voteLocked={voteLocked}
+          lockSecondsLeft={lockSecondsLeft}
           canIntervene={canIntervene}
+          iClaimed={iClaimed}
+          interventionPending={claimActive}
+          interventionSecondsLeft={interventionSecondsLeft}
           interventionStake={interventionStake(round)}
-          onStartIntervene={() =>
-            startIntervention(
-              code,
-              round,
-              voteIndex,
-              uid,
-              interventionStake(round),
-              Date.now() + INTERVENTION_WRITE_MS
-            )
+          typeMs={INTERVENTION_TYPE_MS}
+          onClaim={() => claimIntervention(code, round, voteIndex, uid)}
+          onCancelIntervene={() =>
+            releaseIntervention(code, round, voteIndex, uid).catch(() => {})
           }
           onIntervene={(text) =>
-            intervene(
-              code,
-              round,
-              voteIndex,
-              uid,
-              text,
-              interventionStake(round),
-              Date.now() + INTERVENTION_POST_VOTE_MS
-            ).catch(() => {})
-          }
-          onCancelIntervene={() =>
-            cancelIntervention(
-              code,
-              round,
-              voteIndex,
-              uid,
-              Date.now() + INTERVENTION_RESUME_MS
-            ).catch(() => {})
+            intervene(code, round, voteIndex, uid, text, interventionStake(round)).catch(
+              () => {}
+            )
           }
           step={voteIndex + 1}
           totalSteps={matchups.length}
           secondsLeft={secondsLeft}
-          total={voteTotal}
+          total={VOTE_MS / 1000}
           onVote={(idx) => submitVote(code, round, voteIndex, uid, targets[idx])}
         />
       </RoundBadge>

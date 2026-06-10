@@ -4,9 +4,15 @@ import prompts from '../data/prompts'
 // the host actually advances as soon as everyone has acted, so these only bite
 // when someone is slow or disconnected.
 export const ANSWER_MS = 90_000
-export const VOTE_MS = 25_000
+export const VOTE_MS = 20_000
 export const RESULTS_MS = 5_000
 export const TOTAL_ROUNDS = 3
+// Each matchup opens with a short read-only window: votes are locked so everyone
+// takes in the prompt + answers first, and it's the only time a player may step
+// in (see intervention below). The host doesn't start the VOTE_MS clock until
+// this window — and any in-flight intervention — has cleared (see isVotingLocked).
+// 8s gives enough time to read both answers and decide whether to step in.
+export const VOTE_LOCK_MS = 8_000
 export const POINTS_PER_VOTE = 100
 // Later rounds are worth more (points = POINTS_PER_VOTE * round) so a player who
 // fell behind early can still mount a comeback in the final round. And sweeping
@@ -29,19 +35,16 @@ export const SWEEP_MIN_VOTERS = 2
 export const BET_FROM_ROUND = 2
 export const INTERVENTION_MIN_PLAYERS = 6
 export const INTERVENTION_EXCLUDE_TOP = 2
+// Once a player claims the intervention slot during the read window, voting stays
+// locked for everyone until they submit — so no vote can ever land before an
+// intervention does. This caps how long that hold lasts (and how long the
+// claimer has to type) so an abandoned claim can't freeze the matchup. 30s is a
+// generous window to actually write a good answer while everyone waits.
+export const INTERVENTION_TYPE_MS = 30_000
 // Even-money self-bet: win +stake / lose −stake, settled vs. your co-author only.
 export const BET_STAKE = POINTS_PER_VOTE
 // Risk-bet intervention: win +stake (strictly most votes) / lose −stake (dead last).
 export const interventionStake = (round) => POINTS_PER_VOTE * round * 2
-// Intervention is a two-step "step in" so it can be both visible and fair (see
-// the voting branch in useHostLoop): claiming the slot pauses the round and fires
-// the anonymous flash for everyone, the intervener then gets INTERVENTION_WRITE_MS
-// to write, and once they submit the others get a fresh INTERVENTION_POST_VOTE_MS
-// to vote with all three answers on screen. RESUME_MS is the short grace window
-// the round falls back to if the intervener bails or runs out the writing clock.
-export const INTERVENTION_WRITE_MS = 35_000
-export const INTERVENTION_POST_VOTE_MS = 18_000
-export const INTERVENTION_RESUME_MS = 12_000
 
 // ---- Round 3: "Author's Cut" — player-written prompts -----------------------
 // Every player writes one prompt; each prompt is then answered by
@@ -197,6 +200,24 @@ export function allAnswersIn(matchups) {
   })
 }
 
+// Voting on a matchup is locked while either (a) the opening read window is still
+// running, or (b) someone has claimed the intervention slot and is still typing
+// it in (their claim hasn't been filled and hasn't timed out). Releasing only
+// once both clear is what guarantees no vote precedes an intervention. Treats a
+// missing voteLockEndsAt as "window already over" so older rooms behave normally.
+export function isVotingLocked(matchup, voteLockEndsAt, now) {
+  if (voteLockEndsAt && now < voteLockEndsAt) return true
+  const claim = matchup?.interventionClaim
+  if (
+    claim &&
+    !matchup.intervention &&
+    now < (claim.at || 0) + INTERVENTION_TYPE_MS
+  ) {
+    return true
+  }
+  return false
+}
+
 // Everyone who isn't an author of this matchup has cast a vote on it. An
 // intervener becomes a third author (and forfeits their vote), so they're
 // excluded from the expected voters too.
@@ -301,9 +322,7 @@ export function settleMatchupWagers(matchup) {
 
   let intervention = null
   const iv = matchup.intervention
-  // Only a completed step-in (answer written) settles — a reservation the writer
-  // never finished is treated as if it never happened.
-  if (iv && iv.uid != null && iv.answer != null) {
+  if (iv && iv.uid != null) {
     const ivVotes = countFor(iv.uid)
     const authorVotes = authors.map(countFor)
     const result = authorVotes.every((v) => ivVotes > v)

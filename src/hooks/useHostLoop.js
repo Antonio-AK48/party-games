@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import {
   startAnswering,
   startVoting,
+  startVoteClock,
   showResults,
   applyScores,
   startTiebreaker,
@@ -14,13 +15,12 @@ import {
   startRound3Judging,
   showRound3Reveal,
   autopickRound3,
-  dropPendingIntervention,
 } from '../lib/rooms'
 import {
   ANSWER_MS,
   VOTE_MS,
+  VOTE_LOCK_MS,
   RESULTS_MS,
-  INTERVENTION_RESUME_MS,
   TIEBREAKER_VS_MS,
   TOTAL_ROUNDS,
   R3_PROMPT_MS,
@@ -29,6 +29,7 @@ import {
   R3_REVEAL_MS,
   allAnswersIn,
   allVotesIn,
+  isVotingLocked,
   tallyRound,
   settleWagers,
   findTopTie,
@@ -65,6 +66,11 @@ function buildFinalStandings(r, scores) {
 export default function useHostLoop({ room, code, isHost }) {
   const roomRef = useRef(room)
   const pendingRef = useRef(null)
+  // Guards the one-shot phaseEndsAt write when a matchup's read/intervention lock
+  // lifts, so we don't keep pushing the deadline forward each tick before the
+  // write echoes back. Reset whenever we're not in a voting phase, so the next
+  // matchup (and the next game) starts its clock cleanly.
+  const voteClockStartedRef = useRef(false)
 
   // Keep the loop's view of the room current without re-arming the interval.
   useEffect(() => {
@@ -80,6 +86,10 @@ export default function useHostLoop({ room, code, isHost }) {
       const r = roomRef.current
       if (!r?.meta) return
       const { status, round = 1, voteIndex = 0, judgeIndex = 0, phaseEndsAt } = r.meta
+
+      // Outside of voting, forget any vote-clock we started — so the next matchup
+      // (and the next game's matchups) each arm their clock exactly once.
+      if (status !== 'voting') voteClockStartedRef.current = false
 
       if (pendingRef.current) {
         if (status === pendingRef.current) pendingRef.current = null
@@ -158,34 +168,27 @@ export default function useHostLoop({ room, code, isHost }) {
         } else if (status === 'answering') {
           if (matchups.length && (allAnswersIn(matchups) || expired)) {
             pendingRef.current = 'voting'
-            await startVoting(code, 0, VOTE_MS)
+            await startVoting(code, 0, VOTE_LOCK_MS)
           }
         } else if (status === 'voting') {
           const m = matchups[voteIndex]
-          const iv = m?.intervention
-          // A reservation with no answer yet = someone is mid-step-in. Hold the
-          // round open (don't advance, even if everyone else has voted) so the
-          // third answer can land and the paused voters get to weigh in. The only
-          // exception is a stale reservation whose writing clock ran out — drop it
-          // and let voting resume.
-          const ivPending = iv && iv.answer == null
-          if (ivPending) {
-            if (iv.writeEndsAt && Date.now() >= iv.writeEndsAt) {
-              await dropPendingIntervention(
-                code,
-                round,
-                voteIndex,
-                Date.now() + INTERVENTION_RESUME_MS
-              )
+          if (m) {
+            const locked = isVotingLocked(m, r.meta.voteLockEndsAt, Date.now())
+            if (!locked) {
+              if (!phaseEndsAt && !voteClockStartedRef.current) {
+                // Read window (and any intervention) cleared — start the vote clock.
+                voteClockStartedRef.current = true
+                await startVoteClock(code, VOTE_MS)
+              } else if (phaseEndsAt && (allVotesIn(m, uids) || Date.now() >= phaseEndsAt)) {
+                pendingRef.current = 'results'
+                await showResults(code, RESULTS_MS)
+              }
             }
-          } else if (m && (allVotesIn(m, uids) || expired)) {
-            pendingRef.current = 'results'
-            await showResults(code, RESULTS_MS)
           }
         } else if (status === 'results' && expired) {
           if (voteIndex + 1 < matchups.length) {
             pendingRef.current = 'voting'
-            await startVoting(code, voteIndex + 1, VOTE_MS)
+            await startVoting(code, voteIndex + 1, VOTE_LOCK_MS)
           } else {
             const gained = tallyRound(matchups, round)
             // Experimental: even-money bets + risk-bet interventions. Returns {}
