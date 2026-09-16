@@ -4,6 +4,7 @@ import CipherGuessing from './CipherGuessing'
 import CipherReveal from './CipherReveal'
 import CipherScoreboard from './CipherScoreboard'
 import useCipherHostLoop from '../hooks/useCipherHostLoop'
+import { Screen, Panel, Label, BackLink } from './ui'
 import {
   submitCipherClues,
   updateCipherGuess,
@@ -18,32 +19,35 @@ import {
   LOSE_MISCOMS,
 } from '../lib/cipher'
 
-// Team colour tokens — sky for A, rose for B (visually far apart so spectators
-// don't confuse teams at a glance).
+// Team colour tokens — the canonical cyberpunk pair, cyan for A and magenta for
+// B. Maximally far apart so spectators never confuse teams at a glance, and
+// both already live in the palette. `frame`/`face` feed the chamfered panels.
 const THEME_A = {
+  team: 'A',
   label: 'Team A',
-  accent: 'text-sky-300',
-  ring: 'ring-sky-500',
-  border: 'border-sky-500/40',
-  bg: 'bg-sky-500/10',
-  pillBg: 'bg-sky-500/15',
-  pillBorder: 'border-sky-400/40',
+  accent: 'text-cyan',
+  frame: 'bg-cyan',
+  face: 'bg-cyan/8',
+  pillBorder: 'border-cyan/45',
+  pillBg: 'bg-cyan/15',
+  dot: 'bg-cyan',
 }
 const THEME_B = {
+  team: 'B',
   label: 'Team B',
-  accent: 'text-rose-300',
-  ring: 'ring-rose-500',
-  border: 'border-rose-500/40',
-  bg: 'bg-rose-500/10',
-  pillBg: 'bg-rose-500/15',
-  pillBorder: 'border-rose-400/40',
+  accent: 'text-neon',
+  frame: 'bg-neon',
+  face: 'bg-neon/8',
+  pillBorder: 'border-neon/45',
+  pillBg: 'bg-neon/15',
+  dot: 'bg-neon',
 }
 
 function Centered({ children }) {
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-6 py-12 text-center">
+    <Screen width="max-w-md" className="text-center">
       {children}
-    </div>
+    </Screen>
   )
 }
 
@@ -52,7 +56,7 @@ function TokenHeader({ cipher, themeA, themeB }) {
   const a = cipher.teamA || {}
   const b = cipher.teamB || {}
   return (
-    <div className="grid grid-cols-2 gap-3 mb-5">
+    <div className="mb-4 grid grid-cols-2 gap-3">
       <TeamTokens label="Team A" theme={themeA} state={a} />
       <TeamTokens label="Team B" theme={themeB} state={b} />
     </div>
@@ -63,35 +67,46 @@ function TeamTokens({ label, theme, state }) {
   const intercepts = state.intercepts || 0
   const miscoms = state.miscoms || 0
   return (
-    <div className={`rounded-xl border p-3 ${theme.border} ${theme.bg}`}>
-      <p className={`text-xs uppercase tracking-[0.3em] font-semibold mb-2 ${theme.accent}`}>
-        {label}
-      </p>
-      <div className="flex items-center gap-3 text-sm">
-        <span className="flex items-center gap-1">
-          <Pip filled={intercepts >= 1} tone="emerald" />
-          <Pip filled={intercepts >= 2} tone="emerald" />
-          <span className="text-slate-500 ml-1">intercepts ({intercepts}/{WIN_INTERCEPTS})</span>
-        </span>
-        <span className="flex items-center gap-1">
-          <Pip filled={miscoms >= 1} tone="rose" />
-          <Pip filled={miscoms >= 2} tone="rose" />
-          <span className="text-slate-500 ml-1">miscoms ({miscoms}/{LOSE_MISCOMS})</span>
-        </span>
+    <div data-team={theme.team} className={`cut-frame cut-sm ${theme.frame}`}>
+      <div className={`cut-face p-3 ${theme.face}`}>
+        <p className={`hud mb-2.5 text-[0.62rem] ${theme.accent}`}>{label}</p>
+        <div className="flex flex-col gap-1.5">
+          <TokenRow
+            label="intercepts"
+            filled={intercepts}
+            max={WIN_INTERCEPTS}
+            tone="bg-lime"
+          />
+          <TokenRow
+            label="miscoms"
+            filled={miscoms}
+            max={LOSE_MISCOMS}
+            tone="bg-rose"
+          />
+        </div>
       </div>
     </div>
   )
 }
 
-function Pip({ filled, tone }) {
-  const filledClass =
-    tone === 'emerald' ? 'bg-emerald-400 border-emerald-400' : 'bg-rose-400 border-rose-400'
+function TokenRow({ label, filled, max, tone }) {
   return (
-    <span
-      className={`w-3 h-3 rounded-full border ${
-        filled ? filledClass : 'border-slate-700'
-      }`}
-    />
+    <div className="flex items-center gap-2">
+      <span className="flex gap-1">
+        {Array.from({ length: max }).map((_, i) => (
+          <span
+            key={i}
+            style={{ '--cut': '3px' }}
+            className={`cut h-3 w-3 ${
+              i < filled ? tone : 'bg-surface-3'
+            }`}
+          />
+        ))}
+      </span>
+      <span className="hud text-[0.55rem] text-faint">
+        {label} {filled}/{max}
+      </span>
+    </div>
   )
 }
 
@@ -99,23 +114,26 @@ function Pip({ filled, tone }) {
 function MyKeywords({ keywords, theme }) {
   if (!keywords?.length) return null
   return (
-    <div className={`rounded-2xl border p-4 mb-5 ${theme.border} ${theme.bg}`}>
-      <p className={`text-xs uppercase tracking-[0.3em] font-semibold mb-3 ${theme.accent}`}>
-        Your keywords
-      </p>
-      <ol className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        {keywords.map((kw, i) => (
-          <li
-            key={i}
-            className={`rounded-lg border ${theme.pillBorder} ${theme.pillBg} px-3 py-2 flex items-center gap-2`}
-          >
-            <span className={`text-lg font-black tabular-nums ${theme.accent}`}>
-              {i + 1}
-            </span>
-            <span className="font-medium">{kw}</span>
-          </li>
-        ))}
-      </ol>
+    <div data-team={theme.team} className={`cut-frame mb-4 ${theme.frame}`}>
+      <div className={`cut-face p-4 ${theme.face}`}>
+        <p className={`hud mb-3 text-[0.62rem] ${theme.accent}`}>
+          your keywords
+        </p>
+        <ol className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {keywords.map((kw, i) => (
+            <li
+              key={i}
+              style={{ '--cut': '7px' }}
+              className={`cut flex items-center gap-2 border px-3 py-2 ${theme.pillBorder} ${theme.pillBg}`}
+            >
+              <span className={`hud text-base tabular-nums ${theme.accent}`}>
+                {i + 1}
+              </span>
+              <span className="min-w-0 truncate font-semibold">{kw}</span>
+            </li>
+          ))}
+        </ol>
+      </div>
     </div>
   )
 }
@@ -135,23 +153,26 @@ function CipherHistory({ rounds, currentRound, themeA, themeB }) {
   if (entries.length === 0) return null
   return (
     <div className="mt-8">
-      <p className="text-xs uppercase tracking-[0.3em] text-slate-500 font-semibold mb-2">
-        Prior rounds (for pattern hunting)
-      </p>
+      <Label className="mb-2">prior rounds · pattern hunting</Label>
       <div className="space-y-3">
         {entries.map(({ n, data }) => (
-          <div
-            key={n}
-            className="rounded-xl border border-slate-800 bg-slate-900/50 p-3 text-sm"
-          >
-            <p className="text-slate-500 text-xs uppercase tracking-wider mb-2">
-              Round {n}
-            </p>
-            <div className="grid sm:grid-cols-2 gap-3">
-              <HistoryTeam label="Team A" theme={themeA} clues={data.clues?.A} code={data.codes?.A} />
-              <HistoryTeam label="Team B" theme={themeB} clues={data.clues?.B} code={data.codes?.B} />
+          <Panel key={n} sm bodyClassName="p-3">
+            <p className="hud mb-2 text-[0.58rem] text-faint">round {n}</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <HistoryTeam
+                label="Team A"
+                theme={themeA}
+                clues={data.clues?.A}
+                code={data.codes?.A}
+              />
+              <HistoryTeam
+                label="Team B"
+                theme={themeB}
+                clues={data.clues?.B}
+                code={data.codes?.B}
+              />
             </div>
-          </div>
+          </Panel>
         ))}
       </div>
     </div>
@@ -163,16 +184,16 @@ function HistoryTeam({ label, theme, clues, code }) {
   const codeArr = toArr(code)
   return (
     <div>
-      <p className={`text-xs uppercase tracking-wider font-semibold mb-1 ${theme.accent}`}>
+      <p className={`hud mb-1.5 text-[0.58rem] ${theme.accent}`}>
         {label} · code {codeArr.join('-')}
       </p>
       <ol className="space-y-0.5">
         {clueArr.map((c, i) => (
-          <li key={i} className="text-slate-300">
-            <span className={`tabular-nums font-bold ${theme.accent}`}>
+          <li key={i} className="flex gap-2 text-sm">
+            <span className={`hud tabular-nums ${theme.accent}`}>
               {codeArr[i]}
-            </span>{' '}
-            <span className="text-slate-200">{c}</span>
+            </span>
+            <span className="min-w-0 text-muted">{c}</span>
           </li>
         ))}
       </ol>
@@ -191,7 +212,7 @@ function CipherGame({ room, code, uid, isHost, onLeave }) {
   if (!cipher) {
     return (
       <Centered>
-        <p className="text-slate-400">Setting up Decode…</p>
+        <p className="text-muted">Setting up Decode…</p>
       </Centered>
     )
   }
@@ -211,34 +232,33 @@ function CipherGame({ room, code, uid, isHost, onLeave }) {
   // ---- Final scoreboard --------------------------------------------------
   if (status === 'cipher-scoreboard') {
     return (
-      <CipherScoreboard
-        cipher={cipher}
-        playersMap={playersMap}
-        themeA={THEME_A}
-        themeB={THEME_B}
-        onLeave={onLeave}
-      />
+      <div data-game="cipher">
+        <CipherScoreboard
+          cipher={cipher}
+          playersMap={playersMap}
+          themeA={THEME_A}
+          themeB={THEME_B}
+          onLeave={onLeave}
+        />
+      </div>
     )
   }
 
   // ---- In-round shell (header + keywords + phase body) -------------------
   return (
-    <div className="min-h-screen flex flex-col items-center px-6 py-12">
-      <div className="w-full max-w-2xl">
-        <button
-          onClick={onLeave}
-          className="text-slate-500 hover:text-slate-300 text-sm mb-4 transition"
-        >
-          ← Leave game
-        </button>
+    // data-game retints all the generic chrome (buttons, fields, ticks) to cyan.
+    <div data-game="cipher">
+      <Screen center={false}>
+        <BackLink onClick={onLeave}>← leave game</BackLink>
 
-        <div className="flex items-center justify-between mb-5">
-          <p className="text-xs uppercase tracking-[0.4em] text-sky-400 font-semibold">
-            Decode
-          </p>
-          <p className="text-xs uppercase tracking-wider text-slate-500">
-            Round {round} / {MAX_ROUNDS}
-          </p>
+        <div className="mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="animate-blink h-1.5 w-1.5 accent-bg" />
+            <span className="hud text-[0.68rem] accent-text">decode</span>
+          </div>
+          <span className="hud text-[0.62rem] text-faint">
+            round {round}/{MAX_ROUNDS}
+          </span>
         </div>
 
         <TokenHeader cipher={cipher} themeA={THEME_A} themeB={THEME_B} />
@@ -246,9 +266,11 @@ function CipherGame({ room, code, uid, isHost, onLeave }) {
         {mySide && <MyKeywords keywords={toArr(myTeam?.keywords)} theme={myTheme} />}
 
         {!mySide && (
-          <div className="rounded-2xl border border-slate-800 bg-slate-900 p-4 mb-5 text-center text-sm text-slate-400">
-            You're not on a team in this game — sit back and watch.
-          </div>
+          <Panel sm className="mb-4" bodyClassName="p-4 text-center">
+            <p className="text-sm text-muted">
+              You&apos;re not on a team in this game — sit back and watch.
+            </p>
+          </Panel>
         )}
 
         {/* Phase body */}
@@ -300,38 +322,48 @@ function CipherGame({ room, code, uid, isHost, onLeave }) {
         />
 
         {/* Roster footer */}
-        <div className="grid grid-cols-2 gap-3 mt-8 text-xs">
-          <Roster label="Team A" theme={THEME_A} uids={toArr(cipher.teamA?.players)} playersMap={playersMap} highlightUid={uid} />
-          <Roster label="Team B" theme={THEME_B} uids={toArr(cipher.teamB?.players)} playersMap={playersMap} highlightUid={uid} />
+        <div className="mt-8 grid grid-cols-2 gap-3">
+          <Roster
+            label="Team A"
+            theme={THEME_A}
+            uids={toArr(cipher.teamA?.players)}
+            playersMap={playersMap}
+            highlightUid={uid}
+          />
+          <Roster
+            label="Team B"
+            theme={THEME_B}
+            uids={toArr(cipher.teamB?.players)}
+            playersMap={playersMap}
+            highlightUid={uid}
+          />
         </div>
-      </div>
+      </Screen>
     </div>
   )
 }
 
 function Roster({ label, theme, uids, playersMap, highlightUid }) {
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-3">
-      <p className={`text-xs uppercase tracking-wider font-semibold mb-2 ${theme.accent}`}>
-        {label}
-      </p>
-      <ul className="space-y-1">
+    <Panel sm bodyClassName="p-3">
+      <p className={`hud mb-2 text-[0.58rem] ${theme.accent}`}>{label}</p>
+      <ul className="space-y-1.5">
         {uids.map((u) => {
           const p = playersMap[u] || {}
           return (
             <li key={u} className="flex items-center gap-2">
               <Avatar name={p.name} avatar={p.avatar} className="w-6 h-6 text-xs" />
-              <span className="text-sm">{p.name || 'Someone'}</span>
+              <span className="min-w-0 truncate text-sm">
+                {p.name || 'Someone'}
+              </span>
               {u === highlightUid && (
-                <span className="text-[10px] uppercase tracking-wider text-slate-500 ml-auto">
-                  you
-                </span>
+                <span className="hud ml-auto text-[0.55rem] text-faint">you</span>
               )}
             </li>
           )
         })}
       </ul>
-    </div>
+    </Panel>
   )
 }
 

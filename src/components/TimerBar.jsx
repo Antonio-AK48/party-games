@@ -27,27 +27,41 @@ function TimerBar({ secondsLeft, total }) {
   const critical = secondsLeft <= 5
 
   return (
-    <div className="w-full max-w-2xl mx-auto mb-8">
-      <div className="flex items-center justify-between text-sm mb-2">
-        <span className="text-slate-500 uppercase tracking-wider">Time left</span>
+    <div className="mx-auto mb-8 w-full max-w-2xl">
+      <div className="mb-2 flex items-baseline justify-between">
+        <span className="hud text-[0.62rem] text-faint">time remaining</span>
         <span
-          className={`tabular-nums ${
+          className={`hud tabular-nums tracking-normal ${
             critical
-              ? 'text-red-400 font-bold animate-pulse'
+              ? 'animate-pulse text-rose text-lg'
               : urgent
-              ? 'text-red-400 font-semibold'
-              : 'text-slate-400'
+                ? 'text-rose text-base'
+                : 'text-muted text-base'
           }`}
         >
-          {secondsLeft}s
+          {String(secondsLeft).padStart(2, '0')}
         </span>
       </div>
-      <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+      {/* Segmented rather than a smooth bar — a readout, not a progress bar. */}
+      <div className="relative h-2 overflow-hidden bg-surface-2">
         <div
           className={`h-full transition-all duration-500 ease-linear ${
-            urgent ? 'bg-red-500' : 'bg-purple-500'
+            urgent ? 'bg-rose' : 'bg-[var(--accent)]'
           }`}
-          style={{ width: `${pct}%` }}
+          style={{
+            width: `${pct}%`,
+            boxShadow: urgent
+              ? '0 0 12px var(--color-rose)'
+              : '0 0 12px var(--accent)',
+          }}
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0"
+          style={{
+            backgroundImage:
+              'repeating-linear-gradient(90deg, transparent 0 7px, var(--color-ink) 7px 9px)',
+          }}
         />
       </div>
     </div>

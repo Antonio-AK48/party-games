@@ -22,27 +22,30 @@ function AvatarPicker({ value, onChange, takenIds = [] }) {
             disabled={locked}
             onClick={() => onChange(a.id)}
             title={locked ? `${a.id} (taken)` : a.id}
-            className={`relative rounded-full overflow-hidden aspect-square transition ${
+            style={{ '--cut': '18%' }}
+            className={`cut-frame relative aspect-square transition ${
               selected
-                ? 'ring-4 ring-purple-500 ring-offset-2 ring-offset-slate-950'
+                ? 'bg-[var(--accent)] shadow-[var(--accent-glow)]'
                 : locked
-                  ? 'cursor-not-allowed'
-                  : 'opacity-80 hover:opacity-100 hover:scale-105'
+                  ? 'bg-line cursor-not-allowed'
+                  : 'bg-line hover:bg-line-bright hover:-translate-y-0.5'
             }`}
           >
-            <img
-              src={a.url}
-              alt={a.id}
-              decoding="async"
-              className={`w-full h-full object-cover ${
-                locked ? 'grayscale opacity-25' : ''
-              }`}
-            />
-            {locked && (
-              <span className="absolute inset-0 flex items-center justify-center text-3xl">
-                🔒
-              </span>
-            )}
+            <span className="cut-face relative block h-full w-full overflow-hidden bg-surface">
+              <img
+                src={a.url}
+                alt={a.id}
+                decoding="async"
+                className={`h-full w-full object-cover transition ${
+                  locked ? 'grayscale opacity-20' : selected ? '' : 'opacity-75'
+                }`}
+              />
+              {locked && (
+                <span className="hud absolute inset-0 flex items-center justify-center text-[0.6rem] text-faint">
+                  taken
+                </span>
+              )}
+            </span>
           </button>
         )
       })}

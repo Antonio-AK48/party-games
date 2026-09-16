@@ -1,4 +1,5 @@
 import { CODE_LENGTH, toArr } from '../lib/cipher'
+import { Pill, Label } from './ui'
 
 // Phase: cipher-reveal. Show what actually happened this round — the real
 // codes, both teams' guesses side-by-side with each, and any tokens earned.
@@ -6,14 +7,15 @@ import { CODE_LENGTH, toArr } from '../lib/cipher'
 function CodePill({ digits, theme, highlight }) {
   const arr = toArr(digits)
   return (
-    <div className="inline-flex gap-2">
+    <div className="inline-flex gap-1.5">
       {arr.map((d, i) => (
         <span
           key={i}
-          className={`w-10 h-10 rounded-md border flex items-center justify-center text-xl font-bold tabular-nums ${
+          style={{ '--cut': '5px' }}
+          className={`cut hud flex h-9 w-9 items-center justify-center border text-lg tabular-nums ${
             highlight
               ? `${theme.pillBorder} ${theme.pillBg} ${theme.accent}`
-              : 'border-slate-800 bg-slate-900 text-slate-300'
+              : 'border-line bg-surface text-muted'
           }`}
         >
           {d}
@@ -32,10 +34,10 @@ function GuessRow({ label, guess, code, theme }) {
   })()
   return (
     <div className="flex items-center justify-between gap-3 py-1.5">
-      <span className="text-sm text-slate-400">{label}</span>
+      <span className="hud text-[0.58rem] text-faint">{label}</span>
       <div className="flex items-center gap-2">
         <CodePill digits={guess} theme={theme} highlight={correct} />
-        <span className={correct ? 'text-emerald-400' : 'text-rose-400'}>
+        <span className={`text-lg ${correct ? 'text-lime' : 'text-rose'}`}>
           {correct ? '✓' : '✗'}
         </span>
       </div>
@@ -43,71 +45,71 @@ function GuessRow({ label, guess, code, theme }) {
   )
 }
 
-function TeamPanel({ label, theme, clues, code, guessesByOther, resultForThisTeam, intelOnly }) {
+function TeamPanel({
+  label,
+  theme,
+  clues,
+  code,
+  guessesByOther,
+  resultForThisTeam,
+  intelOnly,
+}) {
   return (
-    <div className={`rounded-2xl border p-5 ${theme.border} ${theme.bg}`}>
-      <div className="flex items-center justify-between mb-3">
-        <p
-          className={`text-xs uppercase tracking-[0.3em] font-semibold ${theme.accent}`}
-        >
-          {label}
-        </p>
-        <div className="flex items-center gap-2">
-          <p className="text-xs uppercase tracking-wider text-slate-500">code</p>
-          <CodePill digits={code} theme={theme} highlight />
+    <div data-team={theme.team} className={`cut-frame ${theme.frame}`}>
+      <div className={`cut-face ticks relative p-5 ${theme.face}`}>
+        <div className="mb-4 flex items-center justify-between gap-3 pr-6">
+          <p className={`hud text-[0.68rem] ${theme.accent}`}>{label}</p>
+          <div className="flex items-center gap-2">
+            <span className="hud text-[0.55rem] text-faint">code</span>
+            <CodePill digits={code} theme={theme} highlight />
+          </div>
         </div>
-      </div>
 
-      <ol className="space-y-1.5 mb-4">
-        {Array.from({ length: CODE_LENGTH }).map((_, i) => (
-          <li key={i} className="flex items-baseline gap-3">
-            <span className={`text-lg font-bold tabular-nums ${theme.accent}`}>
-              #{i + 1} → {toArr(code)[i]}
-            </span>
-            <span className="text-base text-slate-200 break-words">
-              {toArr(clues)[i]}
-            </span>
-          </li>
-        ))}
-      </ol>
+        <ol className="mb-4 space-y-2">
+          {Array.from({ length: CODE_LENGTH }).map((_, i) => (
+            <li key={i} className="flex items-baseline gap-3">
+              <span className={`hud shrink-0 text-sm tabular-nums ${theme.accent}`}>
+                {i + 1}→{toArr(code)[i]}
+              </span>
+              <span className="min-w-0 break-words text-muted">
+                {toArr(clues)[i]}
+              </span>
+            </li>
+          ))}
+        </ol>
 
-      <div className="border-t border-slate-700/30 pt-3 space-y-1">
-        <GuessRow
-          label={`${label} own guess`}
-          guess={guessesByOther.ownByOwner}
-          code={code}
-          theme={theme}
-        />
-        {intelOnly ? (
-          <p className="text-sm text-slate-500 py-1.5">
-            No intercept attempt — round 1 is intel-only.
-          </p>
-        ) : (
+        <div className="space-y-1 border-t border-line pt-3">
           <GuessRow
-            label="Intercept attempt"
-            guess={guessesByOther.oppByOther}
+            label={`${label} own guess`}
+            guess={guessesByOther.ownByOwner}
             code={code}
             theme={theme}
           />
-        )}
-      </div>
+          {intelOnly ? (
+            <p className="hud py-1.5 text-[0.55rem] text-faint">
+              no intercept attempt · round 1 is intel-only
+            </p>
+          ) : (
+            <GuessRow
+              label="intercept attempt"
+              guess={guessesByOther.oppByOther}
+              code={code}
+              theme={theme}
+            />
+          )}
+        </div>
 
-      <div className="mt-3 flex flex-wrap gap-2">
-        {resultForThisTeam.gotIntercept && (
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/40 bg-emerald-400/10 px-3 py-1 text-xs font-bold uppercase tracking-wide text-emerald-300">
-            🎯 Intercepted
-          </span>
-        )}
-        {resultForThisTeam.gotMiscom && (
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-400/40 bg-rose-400/10 px-3 py-1 text-xs font-bold uppercase tracking-wide text-rose-300">
-            💥 Miscommunication
-          </span>
-        )}
-        {!resultForThisTeam.gotIntercept && !resultForThisTeam.gotMiscom && (
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-700 bg-slate-800/40 px-3 py-1 text-xs font-bold uppercase tracking-wide text-slate-400">
-            Clean round
-          </span>
-        )}
+        <div className="mt-4 flex flex-wrap gap-2">
+          {resultForThisTeam.gotIntercept && (
+            <Pill tone="good">🎯 intercepted</Pill>
+          )}
+          {resultForThisTeam.gotMiscom && (
+            <Pill tone="bad">💥 miscommunication</Pill>
+          )}
+          {!resultForThisTeam.gotIntercept && !resultForThisTeam.gotMiscom && (
+            <Pill tone="neutral">clean round</Pill>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -119,10 +121,10 @@ function CipherReveal({ currentRound, round, themeA, themeB }) {
   const intelOnly = (round || 1) <= 1
   return (
     <div className="space-y-4">
-      <p className="text-center text-slate-400 text-sm uppercase tracking-wider">
-        Round reveal{intelOnly ? ' · intel only' : ''}
-      </p>
-      <div className="grid sm:grid-cols-2 gap-3">
+      <Label className="text-center">
+        round reveal{intelOnly ? ' · intel only' : ''}
+      </Label>
+      <div className="grid gap-3 sm:grid-cols-2">
         <TeamPanel
           label="Team A"
           theme={themeA}
@@ -158,8 +160,8 @@ function CipherReveal({ currentRound, round, themeA, themeB }) {
           }}
         />
       </div>
-      <p className="text-center text-slate-500 text-sm">
-        Next round coming up…
+      <p className="hud text-center text-[0.6rem] text-faint">
+        next round coming up…
       </p>
     </div>
   )

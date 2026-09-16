@@ -3,16 +3,11 @@ import confetti from 'canvas-confetti'
 import Avatar from './Avatar'
 import { toArr } from '../lib/cipher'
 import { sounds } from '../lib/sound'
+import { Screen, Btn, Label, Pill } from './ui'
 
 // Phase: cipher-scoreboard. Game over — show the winning team, both rosters,
 // and final intercept/miscom tallies. Confetti + fanfare for a non-tie win.
-function CipherScoreboard({
-  cipher,
-  playersMap,
-  themeA,
-  themeB,
-  onLeave,
-}) {
+function CipherScoreboard({ cipher, playersMap, themeA, themeB, onLeave }) {
   const winner = cipher?.winner // 'A' | 'B' | 'tie'
   const winningTheme = winner === 'A' ? themeA : winner === 'B' ? themeB : null
 
@@ -39,102 +34,94 @@ function CipherScoreboard({
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-6 py-12">
-      <div className="w-full max-w-2xl">
+    <Screen>
+      <div className="mb-10 text-center">
         {winner === 'tie' ? (
-          <div className="text-center mb-10">
-            <p className="text-slate-400 text-sm uppercase tracking-wider mb-3">
-              Final result
-            </p>
-            <h2 className="text-4xl sm:text-5xl font-bold">It's a tie!</h2>
-          </div>
+          <>
+            <Label className="mb-4">final result</Label>
+            <h2 className="display neon text-4xl sm:text-6xl">It&apos;s a tie</h2>
+          </>
         ) : (
-          <div className="text-center mb-10">
-            <p className="text-slate-400 text-sm uppercase tracking-wider mb-3">
-              Winner
-            </p>
-            <h2 className={`text-5xl sm:text-6xl font-black ${winningTheme.accent}`}>
+          <>
+            <Label className="mb-4">winner</Label>
+            <h2
+              data-text={`Team ${winner}`}
+              className={`glitch display text-5xl sm:text-7xl ${winningTheme.accent}`}
+            >
               Team {winner}
             </h2>
-          </div>
+          </>
         )}
-
-        <div className="grid sm:grid-cols-2 gap-3 mb-8">
-          <TeamCard
-            label="Team A"
-            theme={themeA}
-            isWinner={winner === 'A'}
-            players={teamAPlayers}
-            playersMap={playersMap}
-            score={aScore}
-          />
-          <TeamCard
-            label="Team B"
-            theme={themeB}
-            isWinner={winner === 'B'}
-            players={teamBPlayers}
-            playersMap={playersMap}
-            score={bScore}
-          />
-        </div>
-
-        <button
-          onClick={onLeave}
-          className="w-full rounded-lg border border-slate-800 hover:bg-slate-900 py-3 px-6 font-semibold transition"
-        >
-          Back to Home
-        </button>
       </div>
-    </div>
+
+      <div className="mb-8 grid gap-3 sm:grid-cols-2">
+        <TeamCard
+          label="Team A"
+          theme={themeA}
+          isWinner={winner === 'A'}
+          players={teamAPlayers}
+          playersMap={playersMap}
+          score={aScore}
+        />
+        <TeamCard
+          label="Team B"
+          theme={themeB}
+          isWinner={winner === 'B'}
+          players={teamBPlayers}
+          playersMap={playersMap}
+          score={bScore}
+        />
+      </div>
+
+      <Btn variant="ghost" onClick={onLeave}>
+        back to home
+      </Btn>
+    </Screen>
   )
 }
 
 function TeamCard({ label, theme, isWinner, players, playersMap, score }) {
   return (
-    <div
-      className={`rounded-2xl border p-5 transition ${
-        isWinner ? `${theme.border} ${theme.bg}` : 'border-slate-800 bg-slate-900'
-      }`}
-    >
-      <div className="flex items-center justify-between mb-3">
-        <p
-          className={`text-xs uppercase tracking-[0.3em] font-semibold ${
-            isWinner ? theme.accent : 'text-slate-400'
-          }`}
-        >
-          {label}
-        </p>
-        {isWinner && (
-          <span
-            className={`text-xs font-bold uppercase tracking-wide ${theme.accent}`}
-          >
-            ★ Winner
+    <div data-team={theme.team} className={`cut-frame ${isWinner ? theme.frame : 'bg-line'}`}>
+      <div
+        className={`cut-face relative p-5 ${isWinner ? `ticks ${theme.face}` : 'bg-surface'}`}
+      >
+        <div className="mb-4 flex items-center justify-between gap-2 pr-6">
+          <p className={`hud text-[0.68rem] ${isWinner ? theme.accent : 'text-faint'}`}>
+            {label}
+          </p>
+          {isWinner && <Pill tone="accent">★ winner</Pill>}
+        </div>
+
+        <div className="mb-4 flex items-center gap-4">
+          <span className="flex items-baseline gap-1.5">
+            <span className="hud text-xl tabular-nums text-lime">
+              {score.intercepts}
+            </span>
+            <span className="hud text-[0.55rem] text-faint">intercepts</span>
           </span>
-        )}
-      </div>
+          <span className="flex items-baseline gap-1.5">
+            <span className="hud text-xl tabular-nums text-rose">
+              {score.miscoms}
+            </span>
+            <span className="hud text-[0.55rem] text-faint">miscoms</span>
+          </span>
+        </div>
 
-      <div className="flex items-center gap-4 mb-4 text-sm">
-        <span className="flex items-center gap-1.5">
-          <span className="text-emerald-300 font-bold">{score.intercepts}</span>
-          <span className="text-slate-500">intercepts</span>
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="text-rose-300 font-bold">{score.miscoms}</span>
-          <span className="text-slate-500">miscoms</span>
-        </span>
+        <ul className="space-y-2">
+          {players.map((uid) => {
+            const p = playersMap[uid] || {}
+            return (
+              <li key={uid} className="flex items-center gap-2">
+                <Avatar name={p.name} avatar={p.avatar} className="w-8 h-8 text-sm" />
+                <span className="min-w-0 truncate font-semibold">
+                  {p.name || 'Someone'}
+                </span>
+              </li>
+            )
+          })}
+        </ul>
       </div>
-
-      <ul className="space-y-2">
-        {players.map((uid) => {
-          const p = playersMap[uid] || {}
-          return (
-            <li key={uid} className="flex items-center gap-2">
-              <Avatar name={p.name} avatar={p.avatar} className="w-8 h-8 text-sm" />
-              <span className="font-medium">{p.name || 'Someone'}</span>
-            </li>
-          )
-        })}
-      </ul>
     </div>
   )
 }

@@ -1,10 +1,13 @@
 import { getAvatarUrl } from '../lib/avatars'
 
-function Avatar({ name, avatar, className = 'w-9 h-9 text-base' }) {
+// Chamfered rather than round, to match the panel language. The cut scales with
+// the avatar via --cut so a 7px thumbnail and a 160px hero both look right.
+function Avatar({ name, avatar, className = 'w-9 h-9 text-base', cut = '22%' }) {
   const url = avatar ? getAvatarUrl(avatar) : null
   return (
     <div
-      className={`${className} rounded-full bg-purple-600 flex items-center justify-center font-semibold overflow-hidden shrink-0`}
+      style={{ '--cut': cut }}
+      className={`${className} cut bg-[var(--accent)] flex items-center justify-center font-bold text-ink overflow-hidden shrink-0`}
     >
       {url ? (
         <img

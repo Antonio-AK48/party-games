@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import TimerBar from './TimerBar'
 import { VOTE_LOCK_MS } from '../lib/game'
 import { sounds } from '../lib/sound'
+import { Screen, Panel, Btn, Label, TextArea, PhaseHeader } from './ui'
 
 const LOCK_TOTAL = VOTE_LOCK_MS / 1000
 
@@ -14,23 +15,71 @@ function InterventionFlash({ secondsLeft }) {
     sounds.intervention()
   }, [])
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-6 py-12 text-center overflow-hidden">
-      <div className="relative flex flex-col items-center">
-        <div className="iv-flash-ring absolute -inset-16 rounded-full bg-sky-500/20 blur-2xl" />
-        <div className="iv-flash-bolt text-7xl sm:text-8xl">⚡</div>
-        <h2 className="iv-flash-text mt-4 text-4xl sm:text-6xl font-black tracking-tight text-sky-300">
-          INTERVENTION
-        </h2>
-        <p className="mt-4 max-w-sm text-slate-300">
-          Someone thinks they can do better — a third answer is coming.
-        </p>
-        {secondsLeft != null && (
-          <p className="mt-6 text-sm uppercase tracking-widest text-slate-500">
-            Hold your vote · {secondsLeft}s
+    // Forced to the cyan accent: an intervention is a system interrupt, not a
+    // Captions moment, so it deliberately breaks the round's magenta.
+    <div data-game="cipher">
+      <Screen className="overflow-hidden text-center">
+        <div className="relative flex flex-col items-center">
+          <div className="iv-flash-ring absolute -inset-16 bg-cyan/20 blur-3xl" />
+          <div className="iv-flash-bolt text-7xl sm:text-8xl">⚡</div>
+          <h2
+            data-text="INTERVENTION"
+            className="glitch display neon iv-flash-text mt-4 text-4xl sm:text-6xl"
+          >
+            INTERVENTION
+          </h2>
+          <p className="mt-5 max-w-sm text-muted">
+            Someone thinks they can do better — a third answer is coming.
           </p>
-        )}
-      </div>
+          {secondsLeft != null && (
+            <p className="hud mt-7 text-[0.65rem] accent-text">
+              hold your vote · {secondsLeft}s
+            </p>
+          )}
+        </div>
+      </Screen>
     </div>
+  )
+}
+
+// One answer in the list. Buttons when you can vote, plain panels when you
+// can't — same shell either way so the layout doesn't shift between states.
+function AnswerOption({ text, index, picked, dimmed, disabled, onClick }) {
+  const body = (
+    <>
+      <span className="hud absolute left-4 top-3 text-[0.6rem] text-faint">
+        {String.fromCharCode(65 + index)}
+      </span>
+      <p className="pl-7 text-lg font-medium break-words">{text}</p>
+    </>
+  )
+  const frameTone = picked
+    ? 'bg-[var(--accent)] shadow-[var(--accent-glow)]'
+    : 'bg-line'
+  const faceTone = picked
+    ? 'bg-[var(--accent)]/12'
+    : dimmed
+      ? 'bg-surface opacity-40'
+      : 'bg-surface'
+
+  if (disabled) {
+    return (
+      <div className={`cut-frame transition ${frameTone}`}>
+        <div className={`cut-face relative p-5 transition ${faceTone}`}>
+          {body}
+        </div>
+      </div>
+    )
+  }
+  return (
+    <button
+      onClick={onClick}
+      className={`cut-frame block w-full text-left transition hover:bg-line-bright focus-visible:outline-none focus-visible:bg-[var(--accent)] ${frameTone}`}
+    >
+      <span className={`cut-face relative block p-5 transition ${faceTone}`}>
+        {body}
+      </span>
+    </button>
   )
 }
 
@@ -123,173 +172,145 @@ function Voting({
 
   if (isAuthor) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-6 py-12">
-        <div className="w-full max-w-2xl">
-          <p className="text-slate-400 text-sm uppercase tracking-wider text-center mb-4">
-            Matchup {step} of {totalSteps} · this one's yours
-          </p>
-          <h2 className="text-2xl sm:text-3xl font-bold text-center mb-10 leading-tight">
-            {prompt}
-          </h2>
-
-          <TimerBar secondsLeft={secondsLeft} total={total} />
-
-          <div className="space-y-4">
-            {answers.map((text, i) => (
-              <div
-                key={i}
-                className="rounded-2xl border border-slate-800 bg-slate-900 p-6"
-              >
-                <p className="text-lg font-medium break-words">{text}</p>
-              </div>
-            ))}
-          </div>
-
-          <p className="text-center text-slate-400 mt-8">
-            You're in this matchup — sit back while the others vote.
-          </p>
+      <Screen>
+        <PhaseHeader
+          kicker={`matchup ${step} of ${totalSteps}`}
+          title={prompt}
+          sub="this one's yours"
+        />
+        <TimerBar secondsLeft={secondsLeft} total={total} />
+        <div className="space-y-3">
+          {answers.map((text, i) => (
+            <AnswerOption key={i} text={text} index={i} disabled />
+          ))}
         </div>
-      </div>
+        <p className="hud mt-8 text-center text-[0.65rem] text-faint">
+          you&apos;re in this matchup — sit back while the others vote
+        </p>
+      </Screen>
     )
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-6 py-12">
-      <div className="w-full max-w-2xl">
-        <p className="text-slate-400 text-sm uppercase tracking-wider text-center mb-4">
-          Matchup {step} of {totalSteps} ·{' '}
-          {voteLocked ? 'read the answers' : 'vote for the best'}
-        </p>
-        <h2 className="text-2xl sm:text-3xl font-bold text-center mb-10 leading-tight">
-          {prompt}
-        </h2>
+    <Screen>
+      <PhaseHeader
+        kicker={`matchup ${step} of ${totalSteps}`}
+        title={prompt}
+        sub={voteLocked ? 'read the answers' : 'vote for the best'}
+      />
 
-        {/* Status line: typing an intervention → reading window → live vote clock. */}
-        {intervening ? (
-          <div className="w-full max-w-2xl mx-auto mb-8 text-center">
-            <p className="text-sky-300 text-sm font-semibold">
-              ✋ You're stepping in — make it count
-              {typeLeft != null && (
-                <span
-                  className={`tabular-nums ${
-                    typeLeft <= 5 ? 'text-red-400' : 'text-sky-300'
-                  }`}
-                >
-                  {' '}
-                  · {typeLeft}s
-                </span>
-              )}
-            </p>
-          </div>
-        ) : voteLocked ? (
-          <div className="w-full max-w-2xl mx-auto mb-8 text-center">
-            <p className="text-slate-300 text-sm font-medium">
-              {lockSecondsLeft != null
-                ? `Read the answers — voting opens in ${lockSecondsLeft}s`
-                : 'Voting opens shortly…'}
-            </p>
-            <div className="mt-3 h-1.5 bg-slate-800 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-sky-500 transition-all duration-500 ease-linear"
-                style={{
-                  width: `${
-                    lockSecondsLeft != null
-                      ? Math.min(100, (lockSecondsLeft / LOCK_TOTAL) * 100)
-                      : 100
-                  }%`,
-                }}
-              />
-            </div>
-          </div>
-        ) : (
-          <TimerBar secondsLeft={secondsLeft} total={total} />
-        )}
-
-        <div className="space-y-4">
-          {answers.map((text, i) => {
-            const isPicked = selected === i
-            const isDimmed = voted && !isPicked
-            return (
-              <button
-                key={i}
-                onClick={() => handleVote(i)}
-                disabled={voted || voteLocked}
-                className={`w-full text-left rounded-2xl border p-6 transition ${
-                  isPicked
-                    ? 'border-purple-500 bg-purple-950/40'
-                    : voteLocked
-                    ? 'border-slate-800 bg-slate-900 cursor-default'
-                    : isDimmed
-                    ? 'border-slate-800 bg-slate-900 opacity-40'
-                    : 'border-slate-800 bg-slate-900 hover:border-slate-700 hover:bg-slate-800'
-                }`}
-              >
-                <p className="text-lg font-medium break-words">{text}</p>
-              </button>
-            )
-          })}
+      {/* Status line: typing an intervention → reading window → live vote clock. */}
+      {intervening ? (
+        <div className="mx-auto mb-8 w-full max-w-2xl text-center">
+          <p className="hud text-[0.68rem] text-cyan">
+            ✋ you&apos;re stepping in — make it count
+            {typeLeft != null && (
+              <span className={typeLeft <= 5 ? 'text-rose' : 'text-cyan'}>
+                {' '}
+                · {typeLeft}s
+              </span>
+            )}
+          </p>
         </div>
+      ) : voteLocked ? (
+        <div className="mx-auto mb-8 w-full max-w-2xl">
+          <p className="hud mb-2 text-center text-[0.65rem] text-muted">
+            {lockSecondsLeft != null
+              ? `reading window · voting opens in ${lockSecondsLeft}s`
+              : 'voting opens shortly…'}
+          </p>
+          <div className="h-1.5 overflow-hidden bg-surface-2">
+            <div
+              className="h-full bg-cyan transition-all duration-500 ease-linear"
+              style={{
+                width: `${
+                  lockSecondsLeft != null
+                    ? Math.min(100, (lockSecondsLeft / LOCK_TOTAL) * 100)
+                    : 100
+                }%`,
+                boxShadow: '0 0 12px var(--color-cyan)',
+              }}
+            />
+          </div>
+        </div>
+      ) : (
+        <TimerBar secondsLeft={secondsLeft} total={total} />
+      )}
 
-        {/* Step in with a better answer — only during the read window. Anonymous:
-            nobody learns who stepped in until the results reveal. */}
-        {(canIntervene || intervening) && (
-          <div className="mt-6">
-            {!intervening ? (
-              <button
-                onClick={handleStepIn}
-                className="w-full rounded-2xl border border-sky-500/40 bg-sky-500/5 px-4 py-3 text-left transition hover:border-sky-400 hover:bg-sky-500/10"
-              >
-                <span className="font-semibold text-sky-300">
-                  ✋ I can do better
+      <div className="space-y-3">
+        {answers.map((text, i) => (
+          <AnswerOption
+            key={i}
+            text={text}
+            index={i}
+            picked={selected === i}
+            dimmed={voted && selected !== i}
+            disabled={voted || voteLocked}
+            onClick={() => handleVote(i)}
+          />
+        ))}
+      </div>
+
+      {/* Step in with a better answer — only during the read window. Anonymous:
+          nobody learns who stepped in until the results reveal. */}
+      {(canIntervene || intervening) && (
+        <div className="mt-5" data-game="cipher">
+          {!intervening ? (
+            <button
+              onClick={handleStepIn}
+              className="cut-frame block w-full bg-cyan/50 text-left transition hover:bg-cyan focus-visible:outline-none focus-visible:bg-cyan"
+            >
+              <span className="cut-face block bg-surface p-4">
+                <span className="hud block text-[0.68rem] text-cyan">
+                  ✋ i can do better
                 </span>
-                <span className="mt-1 block text-xs text-slate-500">
+                <span className="mt-2 block text-xs text-faint">
                   Add your own answer and wager {interventionStake}. Voting stays
                   paused until you submit. Win the most votes to take it; finish
                   dead last and you lose it. You give up your vote here.
                 </span>
-              </button>
-            ) : (
-              <div className="rounded-2xl border border-sky-500/40 bg-sky-500/5 p-4 space-y-3">
-                <textarea
-                  value={ivText}
-                  onChange={(e) => setIvText(e.target.value)}
-                  maxLength={100}
-                  autoFocus
-                  rows={3}
-                  placeholder="Show them how it's done…"
-                  className="w-full rounded-lg bg-slate-900 border border-slate-800 px-4 py-3 focus:outline-none focus:border-sky-500 transition resize-none"
-                />
-                <div className="flex items-center justify-between text-sm text-slate-500">
-                  <span>{ivText.length}/100</span>
-                  <span>Wager {interventionStake}</span>
-                </div>
-                <div className="flex gap-3">
-                  <button
-                    onClick={submitIntervention}
-                    disabled={!ivText.trim()}
-                    className="flex-1 rounded-lg bg-sky-600 hover:bg-sky-500 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed py-3 font-semibold transition"
-                  >
-                    Step in
-                  </button>
-                  <button
-                    onClick={handleCancel}
-                    className="rounded-lg border border-slate-800 hover:bg-slate-900 py-3 px-6 font-semibold transition"
-                  >
-                    Cancel
-                  </button>
-                </div>
+              </span>
+            </button>
+          ) : (
+            <Panel tone="bg-cyan" bodyClassName="p-4 space-y-3">
+              <TextArea
+                value={ivText}
+                onChange={(e) => setIvText(e.target.value)}
+                maxLength={100}
+                autoFocus
+                rows={3}
+                placeholder="Show them how it's done…"
+              />
+              <div className="flex items-baseline justify-between">
+                <span className="hud text-[0.62rem] tabular-nums text-faint">
+                  {String(ivText.length).padStart(3, '0')}/100
+                </span>
+                <span className="hud text-[0.62rem] text-cyan">
+                  wager {interventionStake}
+                </span>
               </div>
-            )}
-          </div>
-        )}
+              <div className="flex gap-3">
+                <Btn onClick={submitIntervention} disabled={!ivText.trim()}>
+                  step in
+                </Btn>
+                <Btn variant="ghost" onClick={handleCancel} className="w-auto">
+                  cancel
+                </Btn>
+              </div>
+            </Panel>
+          )}
+        </div>
+      )}
 
-        {voted && (
-          <p className="text-center text-slate-400 mt-8">
-            Locked in. Waiting for the others…
-          </p>
-        )}
-      </div>
-    </div>
+      {voted && (
+        <p className="hud mt-8 text-center text-[0.65rem] text-faint">
+          <Label accent className="inline">
+            locked in
+          </Label>{' '}
+          · waiting for the others…
+        </p>
+      )}
+    </Screen>
   )
 }
 

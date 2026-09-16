@@ -11,10 +11,12 @@ import useHostLoop from '../hooks/useHostLoop'
 import { sounds } from '../lib/sound'
 import {
   submitAnswer,
+  saveAnswerDraft,
   submitVote,
   beginNextRound,
   playAgain,
   submitTiebreakerAnswer,
+  saveTiebreakerDraft,
   submitTiebreakerVote,
   placeBet,
   intervene,
@@ -22,6 +24,8 @@ import {
   releaseIntervention,
   submitRound3Prompt,
   submitRound3Answer,
+  saveRound3PromptDraft,
+  saveRound3AnswerDraft,
   submitRound3Choice,
 } from '../lib/rooms'
 import {
@@ -46,44 +50,35 @@ import {
   R3_CHOSEN_POINTS,
 } from '../lib/game'
 import { FEATURES } from '../lib/features'
+import { Screen, Label, Pill, RuleLabel, Waiting } from './ui'
 
 const toArray = (x) => (!x ? [] : Array.isArray(x) ? x : Object.values(x))
 const authorsOf = (m) => toArray(m.authors)
 
 function Centered({ children }) {
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-6 py-12 text-center">
+    <Screen width="max-w-md" className="text-center">
       {children}
-    </div>
+    </Screen>
   )
 }
 
-function Waiting({ title, subtitle }) {
-  return (
-    <Centered>
-      <div className="max-w-md">
-        <p className="text-slate-400 text-sm uppercase tracking-wider mb-4">
-          {title}
-        </p>
-        <p className="text-slate-400">{subtitle}</p>
-      </div>
-    </Centered>
-  )
-}
-
+// Persistent round marker in the corner — part of the HUD chrome, not content.
+// Round 3 uses the Author's Cut format, so it gets its own identity throughout
+// rather than reading "Round 3 / 3" and implying the same matchup flow.
 function RoundBadge({ round, children }) {
-  // Round 3 uses the Author's Cut format — give it its own identity throughout
-  // so the table knows the rules have changed (rather than seeing "Round 3 / 3"
-  // and expecting the same matchup flow as rounds 1–2).
   const isAuthorsCut = round === TOTAL_ROUNDS
   return (
     <div className="relative">
-      <div
-        className={`absolute top-4 left-4 text-xs uppercase tracking-wider z-10 ${
-          isAuthorsCut ? 'text-purple-400 font-semibold' : 'text-slate-500'
-        }`}
-      >
-        {isAuthorsCut ? "✍ Author's Cut" : `Round ${round} / ${TOTAL_ROUNDS}`}
+      <div className="pointer-events-none absolute left-5 top-5 z-10 flex items-center gap-2">
+        <span
+          className={`h-1.5 w-1.5 ${isAuthorsCut ? 'accent-bg animate-blink' : 'bg-line-bright'}`}
+        />
+        <span
+          className={`hud text-[0.6rem] ${isAuthorsCut ? 'accent-text' : 'text-faint'}`}
+        >
+          {isAuthorsCut ? "author's cut" : `round ${round}/${TOTAL_ROUNDS}`}
+        </span>
       </div>
       {children}
     </div>
@@ -93,8 +88,9 @@ function RoundBadge({ round, children }) {
 function TiebreakerBadge({ children }) {
   return (
     <div className="relative">
-      <div className="absolute top-4 left-4 text-xs text-purple-400 uppercase tracking-wider z-10 font-semibold">
-        Tie-Breaker
+      <div className="pointer-events-none absolute left-5 top-5 z-10 flex items-center gap-2">
+        <span className="animate-blink h-1.5 w-1.5 bg-rose" />
+        <span className="hud text-[0.6rem] text-rose">tie-breaker</span>
       </div>
       {children}
     </div>
@@ -107,27 +103,34 @@ function RoundIntro({ round }) {
   const isAuthorsCut = round === TOTAL_ROUNDS
   const multiplier = !isAuthorsCut ? multiplierLabel(round) : null
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-6 py-12 text-center">
-      <p className="text-slate-400 text-base uppercase tracking-[0.4em] mb-2">
-        Round
-      </p>
-      <p className="text-[10rem] sm:text-[16rem] font-black text-purple-500 leading-none">
-        {round}
-      </p>
-      <p className="text-slate-600 text-sm mt-4 uppercase tracking-widest">
-        of {TOTAL_ROUNDS}
-      </p>
-      {multiplier && (
-        <p className="mt-8 rounded-full border border-amber-400/40 bg-amber-400/10 px-5 py-2 text-lg font-bold uppercase tracking-wide text-amber-300">
-          ⚡ {multiplier}
+    <Screen className="text-center">
+      <div className="flex flex-col items-center">
+        <RuleLabel className="mb-6 w-full max-w-xs">round</RuleLabel>
+        <p
+          data-text={String(round)}
+          className="glitch display neon animate-flicker text-[9rem] leading-none sm:text-[15rem]"
+        >
+          {round}
         </p>
-      )}
-      {isAuthorsCut && (
-        <p className="mt-8 rounded-full border border-purple-400/40 bg-purple-400/10 px-5 py-2 text-lg font-bold uppercase tracking-wide text-purple-300">
-          ✍ Author's Cut
+        <p className="hud mt-4 text-[0.65rem] text-faint">
+          of {TOTAL_ROUNDS}
         </p>
-      )}
-    </div>
+        {multiplier && (
+          <div className="mt-9">
+            <Pill tone="stake" className="text-sm px-4 py-2">
+              ⚡ {multiplier}
+            </Pill>
+          </div>
+        )}
+        {isAuthorsCut && (
+          <div className="mt-9">
+            <Pill tone="accent" className="text-sm px-4 py-2">
+              ✍ author&apos;s cut
+            </Pill>
+          </div>
+        )}
+      </div>
+    </Screen>
   )
 }
 
@@ -135,76 +138,76 @@ function TiebreakerScores({ players }) {
   const sorted = [...players].sort((a, b) => b.score - a.score)
   const topScore = sorted[0]?.score || 0
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-6 py-12">
-      <div className="w-full max-w-2xl">
-        <p className="text-slate-400 text-sm uppercase tracking-[0.3em] text-center mb-2">
-          Standings
-        </p>
-        <h2 className="text-2xl sm:text-3xl font-bold text-center mb-10 text-purple-400">
-          We have a tie at the top!
+    <Screen>
+      <div className="mb-10 text-center">
+        <Label className="mb-3">standings</Label>
+        <h2 className="display text-3xl text-rose sm:text-4xl">
+          We have a tie at the top
         </h2>
-        <ol className="space-y-3">
-          {sorted.map((p, i) => {
-            const isTied = p.score === topScore
-            return (
-              <li
-                key={p.uid}
-                className={`flex items-center gap-4 rounded-2xl border p-4 ${
-                  isTied
-                    ? 'border-purple-500 bg-purple-950/30'
-                    : 'border-slate-800 bg-slate-900'
+      </div>
+      <ol className="space-y-2.5">
+        {sorted.map((p, i) => {
+          const isTied = p.score === topScore
+          return (
+            <li
+              key={p.uid}
+              className={`cut-frame cut-sm ${isTied ? 'bg-rose' : 'bg-line'}`}
+            >
+              <div
+                className={`cut-face flex items-center gap-4 p-4 ${
+                  isTied ? 'bg-rose/10' : 'bg-surface'
                 }`}
               >
-                <span className="text-2xl font-bold text-slate-500 w-8">
-                  {i + 1}
+                <span
+                  className={`hud w-8 text-lg tabular-nums ${
+                    isTied ? 'text-rose' : 'text-faint'
+                  }`}
+                >
+                  {String(i + 1).padStart(2, '0')}
                 </span>
                 <Avatar
                   name={p.name}
                   avatar={p.avatar}
                   className="w-10 h-10 text-base"
                 />
-                <span className="flex-1 font-medium text-lg">{p.name}</span>
-                <span className="text-2xl font-bold tabular-nums">
-                  {p.score}
+                <span className="min-w-0 flex-1 truncate text-lg font-semibold">
+                  {p.name}
                 </span>
-              </li>
-            )
-          })}
-        </ol>
-      </div>
-    </div>
+                <span className="hud text-2xl tabular-nums">{p.score}</span>
+              </div>
+            </li>
+          )
+        })}
+      </ol>
+    </Screen>
   )
 }
 
 function TiebreakerVersus({ playerA, playerB }) {
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-6 py-12 text-center">
-      <p className="text-slate-400 text-sm uppercase tracking-[0.4em] mb-3">
-        Roast battle
-      </p>
-      <h1 className="text-5xl sm:text-7xl font-black text-purple-500 mb-12 tracking-tight">
+    <Screen className="text-center">
+      <RuleLabel className="mx-auto mb-5 max-w-xs">roast battle</RuleLabel>
+      <h1
+        data-text="TIE-BREAKER"
+        className="glitch display neon animate-flicker mb-12 text-5xl sm:text-7xl"
+      >
         TIE-BREAKER
       </h1>
       <div className="flex items-center justify-center gap-4 sm:gap-10">
-        <div className="flex flex-col items-center">
-          <Avatar
-            name={playerA.name}
-            avatar={playerA.avatar}
-            className="w-28 h-28 sm:w-36 sm:h-36 text-5xl ring-4 ring-purple-500 ring-offset-4 ring-offset-slate-950 mb-4"
-          />
-          <p className="font-bold text-xl sm:text-2xl">{playerA.name}</p>
-        </div>
-        <div className="text-5xl sm:text-7xl font-black text-slate-500">VS</div>
-        <div className="flex flex-col items-center">
-          <Avatar
-            name={playerB.name}
-            avatar={playerB.avatar}
-            className="w-28 h-28 sm:w-36 sm:h-36 text-5xl ring-4 ring-purple-500 ring-offset-4 ring-offset-slate-950 mb-4"
-          />
-          <p className="font-bold text-xl sm:text-2xl">{playerB.name}</p>
-        </div>
+        {[playerA, playerB].map((p, i) => (
+          <div key={i} className="flex flex-col items-center">
+            <Avatar
+              name={p.name}
+              avatar={p.avatar}
+              className="w-28 h-28 sm:w-36 sm:h-36 text-5xl shadow-[var(--accent-glow)] mb-4"
+              cut="20%"
+            />
+            <p className="display text-xl sm:text-2xl">{p.name}</p>
+          </div>
+        ))}
       </div>
-    </div>
+      <p className="hud mt-10 text-[0.65rem] text-faint">versus</p>
+    </Screen>
   )
 }
 
@@ -295,6 +298,8 @@ function Game({ room, code, uid, isHost, onLeave }) {
             submitAnswer(code, round, i, uid, text)
             if (betAmount > 0) placeBet(code, round, i, uid, betAmount)
           }}
+          initialDraft={m.drafts?.[uid] || ""}
+          onDraft={(text) => saveAnswerDraft(code, round, i, uid, text)}
         />
       </RoundBadge>
     )
@@ -480,6 +485,8 @@ function Game({ room, code, uid, isHost, onLeave }) {
           placeholder="Make it something everyone can riff on…"
           submitLabel="Submit Prompt"
           onSubmit={(text) => submitRound3Prompt(code, uid, text)}
+          initialDraft={promptsMap[uid]?.draft || ""}
+          onDraft={(text) => saveRound3PromptDraft(code, uid, text)}
         />
       </RoundBadge>
     )
@@ -521,6 +528,8 @@ function Game({ room, code, uid, isHost, onLeave }) {
           secondsLeft={secondsLeft}
           total={R3_ANSWER_MS / 1000}
           onSubmit={(text) => submitRound3Answer(code, i, uid, text)}
+          initialDraft={it.drafts?.[uid] || ""}
+          onDraft={(text) => saveRound3AnswerDraft(code, i, uid, text)}
         />
       </RoundBadge>
     )
@@ -652,6 +661,8 @@ function Game({ room, code, uid, isHost, onLeave }) {
           secondsLeft={secondsLeft}
           total={ANSWER_MS / 1000}
           onSubmit={(text) => submitTiebreakerAnswer(code, uid, text)}
+          initialDraft={tb.drafts?.[uid] || ""}
+          onDraft={(text) => saveTiebreakerDraft(code, uid, text)}
         />
       </TiebreakerBadge>
     )

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import Avatar from './Avatar'
 import AvatarPicker from './AvatarPicker'
 import avatars from '../lib/avatars'
+import { Screen, Panel, Btn, Label, BackLink } from './ui'
 
 const GAME_LABEL = { captions: 'Captions', cipher: 'Decode' }
 // Captions stays at 3 for solo-laptop testing; Decode genuinely needs 4 (2v2).
@@ -42,12 +43,12 @@ function Lobby({
   const hasAvatars = avatars.length > 0
 
   const heroNote = dirty
-    ? 'Tap “Confirm” to lock it in'
+    ? 'confirm to lock it in'
     : me?.avatar
-      ? "That's you"
+      ? 'that’s you'
       : hasAvatars
-        ? 'Pick your avatar below'
-        : "That's you"
+        ? 'pick your avatar below'
+        : 'that’s you'
 
   const handleConfirm = async () => {
     if (!dirty || claiming) return
@@ -78,129 +79,121 @@ function Lobby({
   const handleCopyLink = () => copyText(inviteLink, setLinkCopied)
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-6 py-12">
-      <div className="w-full max-w-2xl">
-        <button
-          onClick={onLeave}
-          className="text-slate-500 hover:text-slate-300 text-sm mb-6 transition"
-        >
-          ← Leave room
-        </button>
+    // data-game retints the entire lobby to whichever game is being set up.
+    <div data-game={gameType}>
+      <Screen center={false}>
+        <BackLink onClick={onLeave}>← leave room</BackLink>
 
-        {/* Big "this is you" preview — updates live as you pick below */}
-        <div className="flex flex-col items-center mb-8">
+        {/* The room code is the single most important thing on this screen —
+            it's what people are squinting at from across the room. */}
+        <Panel ticks glow bodyClassName="p-7 text-center" className="mb-4">
+          <Label accent className="mb-4">
+            {gameLabel} · room code
+          </Label>
+          <button
+            onClick={handleCopy}
+            className="hud neon block w-full text-6xl leading-none tracking-[0.25em] transition hover:brightness-125 sm:text-8xl"
+            title="Click to copy"
+          >
+            {code}
+          </button>
+          <p className="hud mt-5 text-[0.62rem] text-faint">
+            {copied ? '✓ code copied' : 'tap the code to copy'}
+          </p>
+          <div className="mt-5 flex justify-center">
+            <Btn
+              variant="ghost"
+              sm
+              onClick={handleCopyLink}
+              className="w-auto min-w-48"
+            >
+              {linkCopied ? '✓ link copied' : 'copy invite link'}
+            </Btn>
+          </div>
+        </Panel>
+
+        {/* "This is you" — updates live as you pick below. */}
+        <div className="mb-4 flex flex-col items-center py-4">
           <Avatar
             name={me?.name}
             avatar={shown}
-            className="w-36 h-36 text-6xl ring-4 ring-purple-500/50 shadow-lg shadow-purple-900/40"
+            className="w-32 h-32 text-5xl shadow-[var(--accent-glow)]"
+            cut="20%"
           />
-          <p className="mt-4 text-2xl font-bold">{me?.name}</p>
-          <p className="text-slate-500 text-xs uppercase tracking-wider mt-1">
-            {heroNote}
-          </p>
+          <p className="display mt-4 text-2xl">{me?.name}</p>
+          <Label className="mt-1">{heroNote}</Label>
         </div>
 
-        {/* Avatar selection — lives in the room so taken ones can be locked */}
         {hasAvatars && (
-          <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6 mb-4">
-            <h3 className="text-sm uppercase tracking-wider text-slate-400 mb-4">
-              Choose your avatar
-            </h3>
+          <Panel className="mb-4">
+            <Label className="mb-4">choose your avatar</Label>
             <AvatarPicker
               value={shown}
               onChange={setPreview}
               takenIds={takenByOthers}
             />
-            <button
+            <Btn
               onClick={handleConfirm}
               disabled={!dirty || claiming}
-              className="mt-5 w-full rounded-lg bg-purple-600 hover:bg-purple-500 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed py-3 font-semibold transition"
+              className="mt-5"
             >
               {claiming
-                ? 'Locking…'
+                ? 'locking…'
                 : me?.avatar && !dirty
-                  ? '✓ Avatar locked in'
-                  : 'Confirm avatar'}
-            </button>
+                  ? '✓ avatar locked in'
+                  : 'confirm avatar'}
+            </Btn>
             {pickError && (
-              <p className="mt-3 text-sm text-red-400 text-center">{pickError}</p>
+              <p className="mt-3 text-center text-sm text-rose">{pickError}</p>
             )}
-          </div>
+          </Panel>
         )}
 
-        <div className="text-center mb-10">
-          <p
-            className={`text-sm uppercase tracking-[0.3em] mb-2 font-semibold ${
-              isCipher ? 'text-sky-400' : 'text-purple-400'
-            }`}
-          >
-            {gameLabel}
-          </p>
-          <p className="text-slate-400 text-sm uppercase tracking-wider mb-3">
-            Room code
-          </p>
-          <button
-            onClick={handleCopy}
-            className="text-6xl sm:text-7xl font-bold tracking-[0.3em] font-mono hover:text-purple-400 transition"
-            title="Click to copy"
-          >
-            {code}
-          </button>
-          <p className="text-slate-500 text-sm mt-3">
-            {copied ? 'Code copied!' : 'Tap the code to copy it.'}
-          </p>
-          <button
-            onClick={handleCopyLink}
-            className="mt-4 rounded-lg border border-slate-700 hover:border-purple-500 hover:text-purple-300 px-5 py-2 text-sm font-medium transition"
-          >
-            {linkCopied ? 'Invite link copied!' : 'Copy invite link'}
-          </button>
-        </div>
-
-        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6 mb-4">
-          <h3 className="text-sm uppercase tracking-wider text-slate-400 mb-4">
-            Players ({players.length})
-          </h3>
-          <ul className="space-y-3">
-            {players.map((p) => (
+        <Panel className="mb-4">
+          <div className="mb-4 flex items-baseline justify-between">
+            <Label>players</Label>
+            <span className="hud accent-text text-sm tabular-nums">
+              {String(players.length).padStart(2, '0')}
+              <span className="text-faint">/{String(minPlayers).padStart(2, '0')}</span>
+            </span>
+          </div>
+          <ul className="space-y-2.5">
+            {players.map((p, i) => (
               <li key={p.uid} className="flex items-center gap-3">
+                <span className="hud w-6 shrink-0 text-[0.62rem] text-faint">
+                  {String(i + 1).padStart(2, '0')}
+                </span>
                 <Avatar
                   name={p.name}
                   avatar={p.avatar}
-                  className="w-12 h-12 text-lg"
+                  className="w-10 h-10 text-base"
                 />
-                <span className="font-medium">{p.name}</span>
+                <span className="truncate font-semibold">{p.name}</span>
                 {p.uid === myUid && (
-                  <span className="ml-auto text-xs uppercase tracking-wider text-slate-500">
-                    you
-                  </span>
+                  <span className="hud ml-auto text-[0.6rem] accent-text">you</span>
                 )}
               </li>
             ))}
           </ul>
           {isCipher && (
-            <p className="mt-4 text-xs text-slate-500">
+            <p className="mt-4 text-xs text-faint">
               Teams will be split evenly when the host starts.
             </p>
           )}
-        </div>
+        </Panel>
 
         {isHost ? (
-          <button
-            onClick={onStart}
-            disabled={!canStart}
-            className="w-full rounded-lg bg-purple-600 hover:bg-purple-500 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed py-3 font-semibold transition"
-          >
-            {canStart
-              ? 'Start Game'
-              : `Waiting for players… (${minPlayers}+ needed)`}
-          </button>
+          <Btn onClick={onStart} disabled={!canStart}>
+            {canStart ? '▶ start game' : `waiting for players · ${minPlayers}+ needed`}
+          </Btn>
         ) : (
-          <div className="w-full rounded-lg bg-slate-800 text-slate-400 py-3 font-semibold text-center">
-            Waiting for the host to start…
-          </div>
+          <Panel sm bodyClassName="py-3.5 text-center">
+            <span className="hud text-sm text-faint">
+              waiting for the host to start…
+            </span>
+          </Panel>
         )}
-      </div>
+      </Screen>
     </div>
   )
 }

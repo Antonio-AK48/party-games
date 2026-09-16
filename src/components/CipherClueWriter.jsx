@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { CODE_LENGTH, toArr } from '../lib/cipher'
+import { Panel, Btn, Label } from './ui'
 
 // Phase: cipher-clues. Three views depending on who's looking:
 //   1. You ARE this round's encryptor on your team → write 3 clues for the
@@ -47,71 +48,71 @@ function CipherClueWriter({
   // ---- View 3: spectator (no team) — just a wait screen ---------------------
   if (!mySide) {
     return (
-      <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6 text-center">
-        <p className="text-slate-400">
+      <Panel bodyClassName="p-6 text-center">
+        <p className="text-muted">
           Both encryptors are writing clues for their team…
         </p>
-      </div>
+      </Panel>
     )
   }
 
   // ---- View 1: you're the encryptor — write the clues ----------------------
   if (isMyTeamEncryptor && !myCluesSubmitted) {
     return (
-      <div className={`rounded-2xl border p-6 ${myTheme.border} ${myTheme.bg}`}>
-        <p
-          className={`text-xs uppercase tracking-[0.3em] font-semibold mb-2 ${myTheme.accent}`}
-        >
-          Your team's code
-        </p>
-        <p className="text-slate-400 text-sm mb-4">
-          Write one clue per digit. Your teammates need to crack it. Don't let
-          the other team figure out the pattern!
-        </p>
-        <div className="space-y-4">
-          {Array.from({ length: CODE_LENGTH }).map((_, i) => {
-            const digit = myCode[i]
-            const kw = myKeywords[digit - 1]
-            return (
-              <div
-                key={i}
-                className={`rounded-xl border ${myTheme.pillBorder} ${myTheme.pillBg} p-4`}
-              >
-                <div className="flex items-center gap-3 mb-2">
-                  <span
-                    className={`text-3xl font-black tabular-nums ${myTheme.accent}`}
-                  >
-                    {digit}
-                  </span>
-                  <span className="text-lg font-semibold text-slate-300">
-                    → hint at <span className="text-white">{kw}</span>
-                  </span>
+      <div data-team={myTheme.team} className={`cut-frame ${myTheme.frame}`}>
+        <div className={`cut-face ticks relative p-6 ${myTheme.face}`}>
+          <p className={`hud mb-2 text-[0.68rem] ${myTheme.accent}`}>
+            ▸ your team&apos;s code · eyes only
+          </p>
+          <p className="mb-5 text-sm text-muted">
+            Write one clue per digit. Your teammates need to crack it. Don&apos;t
+            let the other team figure out the pattern.
+          </p>
+          <div className="space-y-3">
+            {Array.from({ length: CODE_LENGTH }).map((_, i) => {
+              const digit = myCode[i]
+              const kw = myKeywords[digit - 1]
+              return (
+                <div
+                  key={i}
+                  style={{ '--cut': '9px' }}
+                  className={`cut border p-4 ${myTheme.pillBorder} ${myTheme.pillBg}`}
+                >
+                  <div className="mb-3 flex items-center gap-3">
+                    <span
+                      className={`hud text-3xl leading-none tabular-nums ${myTheme.accent}`}
+                    >
+                      {digit}
+                    </span>
+                    <span className="text-base text-muted">
+                      hint at{' '}
+                      <span className="font-bold text-bright">{kw}</span>
+                    </span>
+                  </div>
+                  <div className="cut-frame cut-sm bg-line transition focus-within:bg-[var(--accent)]">
+                    <input
+                      type="text"
+                      value={clues[i]}
+                      onChange={(e) =>
+                        setClues((prev) => {
+                          const next = [...prev]
+                          next[i] = e.target.value
+                          return next
+                        })
+                      }
+                      maxLength={40}
+                      placeholder="Clue…"
+                      className="cut-face min-h-11 w-full bg-surface px-3 py-3 text-bright placeholder:text-faint focus:outline-none"
+                    />
+                  </div>
                 </div>
-                <input
-                  type="text"
-                  value={clues[i]}
-                  onChange={(e) =>
-                    setClues((prev) => {
-                      const next = [...prev]
-                      next[i] = e.target.value
-                      return next
-                    })
-                  }
-                  maxLength={40}
-                  placeholder="Clue…"
-                  className="w-full rounded-lg bg-slate-950/50 border border-slate-800 px-3 py-2 focus:outline-none focus:border-purple-500 transition"
-                />
-              </div>
-            )
-          })}
+              )
+            })}
+          </div>
+          <Btn onClick={handleSubmit} disabled={!canSubmit} className="mt-5">
+            {submitting ? 'transmitting…' : 'submit clues'}
+          </Btn>
         </div>
-        <button
-          onClick={handleSubmit}
-          disabled={!canSubmit}
-          className="mt-5 w-full rounded-lg bg-purple-600 hover:bg-purple-500 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed py-3 font-semibold transition"
-        >
-          {submitting ? 'Submitting…' : 'Submit clues'}
-        </button>
       </div>
     )
   }
@@ -119,28 +120,30 @@ function CipherClueWriter({
   // ---- View 1.5: you submitted, waiting on the other encryptor -------------
   if (isMyTeamEncryptor && myCluesSubmitted) {
     return (
-      <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6 text-center">
-        <p className="text-slate-300 font-semibold mb-1">Clues locked in.</p>
-        <p className="text-slate-500 text-sm">
+      <Panel ticks bodyClassName="p-6 text-center">
+        <Label accent className="mb-2">
+          clues locked in
+        </Label>
+        <p className="text-sm text-faint">
           {oppCluesSubmitted
             ? 'Opening guessing…'
             : `Waiting for ${opponentEncryptorName} to finish…`}
         </p>
-      </div>
+      </Panel>
     )
   }
 
   // ---- View 2: you're on a team but not encrypting -------------------------
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6 text-center">
-      <p className="text-slate-300 font-semibold mb-1">
-        Your encryptor is writing clues
+    <Panel bodyClassName="p-6 text-center">
+      <Label accent className="mb-2">
+        your encryptor is writing clues
+      </Label>
+      <p className="text-sm text-faint">
+        Look away from their screen. Your team&apos;s keywords are above for when
+        it&apos;s guessing time.
       </p>
-      <p className="text-slate-500 text-sm">
-        Look away from their screen! Your team's keywords are above for when it's
-        guessing time.
-      </p>
-    </div>
+    </Panel>
   )
 }
 

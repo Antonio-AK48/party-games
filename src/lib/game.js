@@ -368,7 +368,10 @@ export function settleWagers(matchups) {
 export function buildRound3Items(prompts) {
   const list = []
   Object.entries(prompts || {}).forEach(([author, p]) => {
-    if (p && p.text) list.push({ author, text: p.text })
+    // An unsubmitted draft counts: whoever ran out of time mid-sentence still
+    // gets the prompt they were writing into the game.
+    const text = p && (p.text || (p.draft || '').trim())
+    if (text) list.push({ author, text })
   })
   for (let i = list.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1))

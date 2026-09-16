@@ -1,4 +1,5 @@
 import { CODE_LENGTH, KEYWORDS_PER_TEAM, toArr, isValidCode } from '../lib/cipher'
+import { Panel, Btn, Label } from './ui'
 
 // Phase: cipher-guessing, run as two gated steps so a team commits its own
 // decode BEFORE it ever sees the enemy's clues (authentic Decrypto order, and it
@@ -20,18 +21,19 @@ function ChoiceButton({ label, digit, isWord, selected, disabled, onClick, theme
       type="button"
       onClick={() => onClick(digit)}
       disabled={disabled}
-      className={`rounded-lg border px-2 py-3 transition break-words ${
-        isWord ? 'text-sm font-semibold leading-tight' : 'text-xl font-bold tabular-nums'
+      style={{ '--cut': '7px' }}
+      className={`cut border px-2 py-3 transition break-words ${
+        isWord ? 'text-sm font-semibold leading-tight' : 'hud text-xl tabular-nums'
       } ${
         selected
           ? `${theme.pillBorder} ${theme.pillBg} ${theme.accent}`
           : disabled
-          ? 'border-slate-800 bg-slate-900 text-slate-600 cursor-not-allowed'
-          : 'border-slate-800 bg-slate-900 text-slate-300 hover:border-slate-700 hover:bg-slate-800'
+            ? 'border-line bg-surface text-faint cursor-not-allowed'
+            : 'border-line bg-surface text-muted hover:border-line-bright hover:bg-surface-2 hover:text-bright'
       }`}
     >
       {isWord && (
-        <span className="block text-[10px] text-slate-500 tabular-nums mb-0.5">
+        <span className="hud mb-1 block text-[0.55rem] tabular-nums text-faint">
           {digit}
         </span>
       )}
@@ -51,17 +53,20 @@ function CodeRow({ slots, onSet, disabled, theme, clues, buttonLabels }) {
       {Array.from({ length: CODE_LENGTH }).map((_, slotIdx) => (
         <div
           key={slotIdx}
-          className="rounded-xl border border-slate-800 bg-slate-900/40 p-3"
+          style={{ '--cut': '9px' }}
+          className="cut border border-line bg-surface/60 p-3"
         >
-          <p className="mb-2 flex items-baseline gap-2">
-            <span className="text-slate-500 text-sm tabular-nums">
+          <p className="mb-2.5 flex items-baseline gap-2">
+            <span className="hud text-[0.6rem] tabular-nums text-faint">
               #{slotIdx + 1}
             </span>
-            <span className="font-semibold text-slate-100 break-words">
-              {clueArr[slotIdx] || <span className="text-slate-600">—</span>}
+            <span className="font-semibold text-bright break-words">
+              {clueArr[slotIdx] || <span className="text-faint">—</span>}
             </span>
           </p>
-          <div className={`grid gap-2 ${isWords ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-4'}`}>
+          <div
+            className={`grid gap-2 ${isWords ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-4'}`}
+          >
             {Array.from({ length: KEYWORDS_PER_TEAM }).map((_, d) => {
               const digit = d + 1
               return (
@@ -118,9 +123,9 @@ function CipherGuessing({
   // Spectators (no team) just wait it out.
   if (!mySide) {
     return (
-      <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6 text-center">
-        <p className="text-slate-400">Both teams are guessing…</p>
-      </div>
+      <Panel bodyClassName="p-6 text-center">
+        <p className="text-muted">Both teams are guessing…</p>
+      </Panel>
     )
   }
 
@@ -163,10 +168,12 @@ function CipherGuessing({
   // ---- Final state: locked, waiting on the other team ----------------------
   if (locked) {
     return (
-      <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6 text-center">
-        <p className="text-slate-300 font-semibold mb-1">Locked in.</p>
-        <p className="text-slate-500 text-sm">Waiting for the other team…</p>
-      </div>
+      <Panel ticks bodyClassName="p-6 text-center">
+        <Label accent className="mb-2">
+          locked in
+        </Label>
+        <p className="text-sm text-faint">Waiting for the other team…</p>
+      </Panel>
     )
   }
 
@@ -175,42 +182,38 @@ function CipherGuessing({
   // of their four hidden keyword slots each clue points to.
   if (ownLocked && !isFirstRound) {
     return (
-      <div className="space-y-5">
-        <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-3 text-sm flex items-center justify-between">
-          <span className="text-slate-400">Your code — locked</span>
-          <span className={`tabular-nums font-bold text-lg ${myTheme.accent}`}>
+      <div className="space-y-4">
+        <Panel sm bodyClassName="flex items-center justify-between p-3">
+          <span className="hud text-[0.62rem] text-faint">your code · locked</span>
+          <span className={`hud text-lg tabular-nums ${myTheme.accent}`}>
             {ownSlots.join('-')}
           </span>
-        </div>
+        </Panel>
 
-        <div className={`rounded-2xl border p-5 ${oppTheme.border} ${oppTheme.bg}`}>
-          <p
-            className={`text-xs uppercase tracking-[0.3em] font-semibold mb-2 ${oppTheme.accent}`}
-          >
-            Intercept {oppLabel}'s code
-          </p>
-          <p className="text-sm text-slate-400 mb-3">
-            For each clue, pick which of their keyword slots (1–4) you think it
-            points to.
-          </p>
-          <CodeRow
-            slots={oppSlots}
-            onSet={handleSet('opp')}
-            disabled={false}
-            theme={oppTheme}
-            clues={oppClues}
-            buttonLabels={null}
-          />
-          <button
-            onClick={onLockGuess}
-            disabled={!canIntercept}
-            className="mt-5 w-full rounded-lg bg-purple-600 hover:bg-purple-500 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed py-3 font-semibold transition"
-          >
-            Submit intercept
-          </button>
-          <p className="mt-2 text-xs text-slate-500 text-center">
-            Anyone on your team can edit. Latest click wins. Lock when ready.
-          </p>
+        <div data-team={oppTheme.team} className={`cut-frame ${oppTheme.frame}`}>
+          <div className={`cut-face ticks relative p-5 ${oppTheme.face}`}>
+            <p className={`hud mb-2 text-[0.68rem] ${oppTheme.accent}`}>
+              ▸ intercept {oppLabel}&apos;s code
+            </p>
+            <p className="mb-4 text-sm text-muted">
+              For each clue, pick which of their keyword slots (1–4) you think it
+              points to.
+            </p>
+            <CodeRow
+              slots={oppSlots}
+              onSet={handleSet('opp')}
+              disabled={false}
+              theme={oppTheme}
+              clues={oppClues}
+              buttonLabels={null}
+            />
+            <Btn onClick={onLockGuess} disabled={!canIntercept} className="mt-5">
+              submit intercept
+            </Btn>
+            <p className="hud mt-3 text-center text-[0.55rem] text-faint">
+              anyone on your team can edit · latest click wins
+            </p>
+          </div>
         </div>
       </div>
     )
@@ -219,51 +222,51 @@ function CipherGuessing({
   // ---- Step 1: decode our own code (enemy clues stay hidden) ----------------
   // You know your own keywords, so you match each clue to a keyword BY WORD.
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {isMyTeamEncryptor ? (
         // You wrote these clues — you already know the code, so you can't help
         // decode it. Wait for the team, then you'll join the intercept.
-        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6 text-center">
-          <p className="text-slate-300 font-semibold mb-1">
-            You encrypted this round
-          </p>
-          <p className="text-slate-500 text-sm">
+        <Panel bodyClassName="p-6 text-center">
+          <Label accent className="mb-2">
+            you encrypted this round
+          </Label>
+          <p className="text-sm text-faint">
             You know the code — your teammates have to decode it.{' '}
             {isFirstRound
               ? 'Sit tight while they lock it in.'
               : "Once they commit, you'll join the intercept."}
           </p>
-        </div>
+        </Panel>
       ) : (
-        <div className={`rounded-2xl border p-5 ${myTheme.border} ${myTheme.bg}`}>
-          <p
-            className={`text-xs uppercase tracking-[0.3em] font-semibold mb-2 ${myTheme.accent}`}
-          >
-            Decode your own code
-          </p>
-          <p className="text-sm text-slate-400 mb-3">
-            For each clue, tap the keyword you think your encryptor meant.
-          </p>
-          <CodeRow
-            slots={ownSlots}
-            onSet={handleSet('own')}
-            disabled={false}
-            theme={myTheme}
-            clues={myClues}
-            buttonLabels={myKeywords}
-          />
-          <button
-            onClick={isFirstRound ? onLockGuess : onLockOwn}
-            disabled={!canLockOwn}
-            className="mt-5 w-full rounded-lg bg-purple-600 hover:bg-purple-500 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed py-3 font-semibold transition"
-          >
-            {isFirstRound ? 'Submit our guess' : "Lock our code & see their clues"}
-          </button>
-          <p className="mt-2 text-xs text-slate-500 text-center">
-            {isFirstRound
-              ? 'Round 1 is intel-only — no interception yet.'
-              : `${oppLabel}'s clues stay hidden until you commit your own code.`}
-          </p>
+        <div data-team={myTheme.team} className={`cut-frame ${myTheme.frame}`}>
+          <div className={`cut-face ticks relative p-5 ${myTheme.face}`}>
+            <p className={`hud mb-2 text-[0.68rem] ${myTheme.accent}`}>
+              ▸ decode your own code
+            </p>
+            <p className="mb-4 text-sm text-muted">
+              For each clue, tap the keyword you think your encryptor meant.
+            </p>
+            <CodeRow
+              slots={ownSlots}
+              onSet={handleSet('own')}
+              disabled={false}
+              theme={myTheme}
+              clues={myClues}
+              buttonLabels={myKeywords}
+            />
+            <Btn
+              onClick={isFirstRound ? onLockGuess : onLockOwn}
+              disabled={!canLockOwn}
+              className="mt-5"
+            >
+              {isFirstRound ? 'submit our guess' : 'lock code & see their clues'}
+            </Btn>
+            <p className="hud mt-3 text-center text-[0.55rem] text-faint">
+              {isFirstRound
+                ? 'round 1 is intel-only — no interception yet'
+                : `${oppLabel}'s clues stay hidden until you commit`}
+            </p>
+          </div>
         </div>
       )}
     </div>

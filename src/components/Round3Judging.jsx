@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import TimerBar from './TimerBar'
 import { sounds } from '../lib/sound'
+import { Screen, PhaseHeader } from './ui'
 
 // Round 3 / Author's Cut, sequential phase: every player sees the same prompt
 // and the 3 anonymous answers; only the prompt's author can pick. The point of
@@ -30,64 +31,70 @@ function Round3Judging({
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-6 py-12">
-      <div className="w-full max-w-2xl">
-        <p className="text-slate-400 text-sm uppercase tracking-wider text-center mb-2">
-          Prompt {step} of {totalSteps} · author's cut
-        </p>
-        <p className="text-purple-300 text-sm font-semibold text-center mb-4">
-          {isAuthor
-            ? 'Your prompt — pick the funniest'
-            : `${judgeName} is choosing the funniest`}
-        </p>
-        <h2 className="text-2xl sm:text-3xl font-bold text-center mb-10 leading-tight">
-          {prompt}
-        </h2>
+    <Screen>
+      <PhaseHeader
+        kicker={`prompt ${step} of ${totalSteps} · author's cut`}
+        title={prompt}
+        sub={
+          isAuthor
+            ? 'your prompt — pick the funniest'
+            : `${judgeName} is choosing the funniest`
+        }
+      />
 
-        <TimerBar secondsLeft={secondsLeft} total={total} />
+      <TimerBar secondsLeft={secondsLeft} total={total} />
 
-        <div className="space-y-4">
-          {answers.map((text, i) => {
-            const isPicked = selected === i
-            const isDimmed = locked && !isPicked
-            const card = isPicked
-              ? 'border-purple-500 bg-purple-950/40'
-              : isDimmed
-              ? 'border-slate-800 bg-slate-900 opacity-40'
-              : isAuthor
-              ? 'border-slate-800 bg-slate-900 hover:border-slate-700 hover:bg-slate-800'
-              : 'border-slate-800 bg-slate-900'
-            return isAuthor ? (
-              <button
-                key={i}
-                onClick={() => handlePick(i)}
-                disabled={locked}
-                className={`w-full text-left rounded-2xl border p-6 transition ${card}`}
-              >
-                <p className="text-lg font-medium break-words">{text}</p>
-              </button>
-            ) : (
-              <div
-                key={i}
-                className={`rounded-2xl border p-6 transition ${card}`}
-              >
-                <p className="text-lg font-medium break-words">{text}</p>
+      <div className="space-y-3">
+        {answers.map((text, i) => {
+          const isPicked = selected === i
+          const isDimmed = locked && !isPicked
+          const frame = isPicked
+            ? 'bg-[var(--accent)] shadow-[var(--accent-glow)]'
+            : 'bg-line'
+          const face = isPicked
+            ? 'bg-[var(--accent)]/12'
+            : isDimmed
+              ? 'bg-surface opacity-40'
+              : 'bg-surface'
+          const body = (
+            <>
+              <span className="hud absolute left-4 top-3 text-[0.6rem] text-faint">
+                {String.fromCharCode(65 + i)}
+              </span>
+              <p className="pl-7 text-lg font-medium break-words">{text}</p>
+            </>
+          )
+          return isAuthor ? (
+            <button
+              key={i}
+              onClick={() => handlePick(i)}
+              disabled={locked}
+              className={`cut-frame block w-full text-left transition hover:bg-line-bright focus-visible:outline-none focus-visible:bg-[var(--accent)] ${frame}`}
+            >
+              <span className={`cut-face relative block p-5 transition ${face}`}>
+                {body}
+              </span>
+            </button>
+          ) : (
+            <div key={i} className={`cut-frame transition ${frame}`}>
+              <div className={`cut-face relative p-5 transition ${face}`}>
+                {body}
               </div>
-            )
-          })}
-        </div>
-
-        <p className="text-center text-slate-400 mt-8">
-          {locked
-            ? isAuthor
-              ? 'Locked in.'
-              : `${judgeName} picked their winner`
-            : isAuthor
-            ? "Pick when you're ready"
-            : 'Waiting on the judge…'}
-        </p>
+            </div>
+          )
+        })}
       </div>
-    </div>
+
+      <p className="hud mt-8 text-center text-[0.65rem] text-faint">
+        {locked
+          ? isAuthor
+            ? 'locked in.'
+            : `${judgeName} picked their winner`
+          : isAuthor
+            ? "pick when you're ready"
+            : 'waiting on the judge…'}
+      </p>
+    </Screen>
   )
 }
 

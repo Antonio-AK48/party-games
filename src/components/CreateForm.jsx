@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Screen, Panel, Btn, Field, Label, BackLink } from './ui'
 
 const GAME_LABELS = {
   captions: 'Captions',
@@ -15,53 +16,42 @@ function CreateForm({ onSubmit, onBack, busy, error, gameType = 'captions' }) {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-6 py-12">
-      <div className="w-full max-w-md">
-        <button
-          onClick={onBack}
-          className="text-slate-500 hover:text-slate-300 text-sm mb-6 transition"
-        >
-          ← Back
-        </button>
+    // data-game retints the whole screen to the game being created.
+    <div data-game={gameType}>
+      <Screen width="max-w-md">
+        <BackLink onClick={onBack}>← back</BackLink>
 
-        <h2 className="text-3xl font-bold mb-2">Create a {label} Room</h2>
-        <p className="text-slate-400 mb-8">
-          Pick a name. We'll generate a room code you can share.
+        <Label accent className="mb-3">
+          new room · {label}
+        </Label>
+        <h2 className="display text-4xl mb-3">Create a room</h2>
+        <p className="text-muted mb-8">
+          Pick a name. We&apos;ll generate a room code you can share.
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-5">
-          <div>
-            <label
-              htmlFor="name"
-              className="block text-sm text-slate-400 mb-2"
-            >
-              Your name
-            </label>
-            <input
-              id="name"
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              maxLength={20}
-              autoFocus
-              placeholder="e.g. Antonio"
-              className="w-full rounded-lg bg-slate-900 border border-slate-800 px-4 py-3 focus:outline-none focus:border-purple-500 transition"
-            />
-          </div>
+          <Field
+            id="name"
+            label="Your name"
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            maxLength={20}
+            autoFocus
+            placeholder="e.g. Antonio"
+          />
 
-          <button
-            type="submit"
-            disabled={!name.trim() || busy}
-            className="w-full rounded-lg bg-purple-600 hover:bg-purple-500 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed py-3 font-semibold transition"
-          >
-            {busy ? 'Creating…' : 'Create Room'}
-          </button>
+          <Btn type="submit" disabled={!name.trim() || busy}>
+            {busy ? 'creating…' : 'create room'}
+          </Btn>
 
           {error && (
-            <p className="text-sm text-red-400 text-center">{error}</p>
+            <Panel sm tone="bg-rose/50" bodyClassName="p-3 text-center">
+              <p className="text-sm text-rose">{error}</p>
+            </Panel>
           )}
         </form>
-      </div>
+      </Screen>
     </div>
   )
 }

@@ -28,7 +28,7 @@ function MuteToggle() {
       onClick={() => setMuted(toggleMuted())}
       aria-label={muted ? 'Unmute sounds' : 'Mute sounds'}
       title={muted ? 'Sounds off' : 'Sounds on'}
-      className="fixed top-3 right-3 z-50 rounded-full border border-slate-800 bg-slate-900/90 px-3 py-2 text-sm text-slate-300 backdrop-blur transition hover:bg-slate-800"
+      className="cut cut-sm fixed-tr fixed z-50 flex h-11 w-11 items-center justify-center border border-line bg-surface/80 text-sm text-muted backdrop-blur transition hover:border-line-bright hover:text-bright"
     >
       {muted ? '🔇' : '🔊'}
     </button>
@@ -37,7 +37,9 @@ function MuteToggle() {
 
 function Shell({ children }) {
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100">
+    <main className="min-h-screen text-bright">
+      {/* CRT refresh band drifting down over everything. */}
+      <div aria-hidden className="sweep animate-scan" />
       <MuteToggle />
       {children}
     </main>
@@ -102,8 +104,17 @@ function App() {
   if (restoring) {
     return (
       <Shell>
-        <div className="min-h-screen flex items-center justify-center text-slate-500">
-          Loading…
+        <div className="min-h-screen flex flex-col items-center justify-center gap-4">
+          <div className="flex gap-1.5">
+            {[0, 1, 2].map((i) => (
+              <span
+                key={i}
+                className="animate-breathe h-2 w-2 accent-bg"
+                style={{ animationDelay: `${i * 0.24}s` }}
+              />
+            ))}
+          </div>
+          <span className="hud text-[0.65rem] text-faint">restoring session…</span>
         </div>
       </Shell>
     )

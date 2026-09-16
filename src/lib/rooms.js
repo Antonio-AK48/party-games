@@ -464,6 +464,83 @@ export async function submitAnswer(code, round, matchupId, uid, text) {
   )
 }
 
+// ---- Drafts ---------------------------------------------------------------
+// What a player types is mirrored to a `drafts` slot as they type, so a phase
+// that times out (or a player who disconnects mid-sentence) still counts what
+// they wrote instead of "(no answer)". Drafts sit beside the answers rather
+// than in them because the host reads a present answer as "this player is
+// done" — a draft must never end the phase early.
+
+const toList = (x) => (!x ? [] : Array.isArray(x) ? x : Object.values(x))
+
+export async function saveAnswerDraft(code, round, matchupId, uid, text) {
+  await set(
+    ref(db, `rooms/${code}/rounds/${round}/matchups/${matchupId}/drafts/${uid}`),
+    text
+  )
+}
+
+// Fold every unsubmitted draft into its answer slot. The host calls this the
+// moment the answering phase expires, just before voting opens.
+export async function promoteAnswerDrafts(code, round, matchups) {
+  const updates = {}
+  toList(matchups).forEach((m, i) => {
+    const answers = m.answers || {}
+    const drafts = m.drafts || {}
+    toList(m.authors).forEach((uid) => {
+      const draft = (drafts[uid] || '').trim()
+      if (answers[uid] == null && draft) {
+        updates[`rooms/${code}/rounds/${round}/matchups/${i}/answers/${uid}`] =
+          draft
+      }
+    })
+  })
+  if (Object.keys(updates).length) await update(ref(db), updates)
+}
+
+export async function saveRound3PromptDraft(code, uid, text) {
+  await set(ref(db, `rooms/${code}/round3/prompts/${uid}/draft`), text)
+}
+
+export async function saveRound3AnswerDraft(code, itemIndex, uid, text) {
+  await set(
+    ref(db, `rooms/${code}/round3/items/${itemIndex}/drafts/${uid}`),
+    text
+  )
+}
+
+export async function promoteRound3AnswerDrafts(code, items) {
+  const updates = {}
+  toList(items).forEach((it, i) => {
+    const answers = it.answers || {}
+    const drafts = it.drafts || {}
+    toList(it.assigned).forEach((uid) => {
+      const draft = (drafts[uid] || '').trim()
+      if (answers[uid] == null && draft) {
+        updates[`rooms/${code}/round3/items/${i}/answers/${uid}`] = draft
+      }
+    })
+  })
+  if (Object.keys(updates).length) await update(ref(db), updates)
+}
+
+export async function saveTiebreakerDraft(code, uid, text) {
+  await set(ref(db, `rooms/${code}/tiebreaker/drafts/${uid}`), text)
+}
+
+export async function promoteTiebreakerDrafts(code, tiebreaker) {
+  const updates = {}
+  const answers = tiebreaker?.answers || {}
+  const drafts = tiebreaker?.drafts || {}
+  toList(tiebreaker?.authors).forEach((uid) => {
+    const draft = (drafts[uid] || '').trim()
+    if (answers[uid] == null && draft) {
+      updates[`rooms/${code}/tiebreaker/answers/${uid}`] = draft
+    }
+  })
+  if (Object.keys(updates).length) await update(ref(db), updates)
+}
+
 export async function submitVote(code, round, matchupId, voterUid, authorUid) {
   await set(
     ref(db, `rooms/${code}/rounds/${round}/matchups/${matchupId}/votes/${voterUid}`),

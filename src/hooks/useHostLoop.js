@@ -15,6 +15,9 @@ import {
   startRound3Judging,
   showRound3Reveal,
   autopickRound3,
+  promoteAnswerDrafts,
+  promoteRound3AnswerDrafts,
+  promoteTiebreakerDrafts,
 } from '../lib/rooms'
 import {
   ANSWER_MS,
@@ -123,6 +126,7 @@ export default function useHostLoop({ room, code, isHost }) {
         } else if (status === 'round3-answering') {
           const items = toArray(r.round3?.items)
           if (items.length && (allRound3AnswersIn(items) || expired)) {
+            if (expired) await promoteRound3AnswerDrafts(code, items)
             pendingRef.current = 'round3-judging'
             await startRound3Judging(code, 0, R3_JUDGE_MS)
           }
@@ -167,6 +171,9 @@ export default function useHostLoop({ room, code, isHost }) {
           await startTiebreakerAnswering(code, ANSWER_MS)
         } else if (status === 'answering') {
           if (matchups.length && (allAnswersIn(matchups) || expired)) {
+            // Out of time: whatever anyone was still typing is already mirrored
+            // to their draft, so fold it in rather than scoring "(no answer)".
+            if (expired) await promoteAnswerDrafts(code, round, matchups)
             pendingRef.current = 'voting'
             await startVoting(code, 0, VOTE_LOCK_MS)
           }
@@ -226,6 +233,7 @@ export default function useHostLoop({ room, code, isHost }) {
           const allIn =
             authors.length > 0 && authors.every((u) => answers[u] != null)
           if (allIn || expired) {
+            if (expired) await promoteTiebreakerDrafts(code, tb)
             pendingRef.current = 'tiebreaker-voting'
             await startTiebreakerVoting(code, VOTE_MS)
           }
